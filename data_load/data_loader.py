@@ -1,11 +1,10 @@
-import numpy as np
-from torch.utils.data import Dataset, DataLoader
-import torch
-from torchvision import transforms as T
 import random
-import time
-from PIL import Image
 from config_para import cfg
+import numpy as np
+import torch
+from PIL import Image
+from torch.utils.data import Dataset
+from torchvision import transforms as T
 
 
 def set_seed(seed=1):
@@ -48,43 +47,29 @@ class subDataset(Dataset):
         for i in range(500):
             self.data.append([int(i) for i in datatemp.readline().strip().split(',')])
 
-        self.train_data_transform = T.Compose([
-            T.ToPILImage(),         # 将Tensor变量的数据转换成PIL图片数据
-            # T.CenterCrop(size=(32, 32)),
-            # T.RandomCrop(size=(32, 32)),
-            # T.Resize(size=(64, 64)),
-            # T.RandomAffine(degrees=0, translate=(0.1, 0.1)),        # 随机仿射变换
-            # T.RandomRotation((-10, 10)),    # 表示在（-10，10）之间随机旋转
-            # T.RandomHorizontalFlip(),   # 按随机概率进行水平翻转，默认概率0.5
-            # T.RandomVerticalFlip(),     # 按随机概率进行垂直翻转，默认概率0.5
-            T.ToTensor(),   # 将PIL Image或numpy形式的图片转换为Tensor，让PyTorch能够对其进行计算和处理，维度为(C,H,W),并对像素值进行归一化。
-            # T.Normalize((0.1307,), (0.3081,)),         # 数据标准化
-            # T.ToPILImage()
+        self.transform_rotation_180 = T.Compose([
+            T.ToPILImage(),
+            T.RandomHorizontalFlip(p=1),
+            T.RandomVerticalFlip(p=1),
+            T.Resize(size=(64, 64)),
+            T.ToTensor(),
         ])
-
-        # self.train_target_transform = T.Compose([
-        #     T.ToPILImage(),
-        #     T.RandomCrop(size=(32, 32)),
-        #     T.Resize(size=(64, 64)),
-        #     # T.CenterCrop(size=(32, 32)),
-        #     T.RandomAffine(degrees=0, translate=(0.1, 0.1)),
-        #     T.RandomRotation((-10, 10)),
-        #     T.RandomHorizontalFlip(),
-        #     T.RandomVerticalFlip(),
-        #     T.ToTensor(),
-        #     T.Normalize((0.1307,), (0.3081,)),         # 数据标准化
-        # ])
-
-        self.test_data_transform = T.Compose([
+        self.transform_horizontal_flip = T.Compose([
+            T.ToPILImage(),
+            T.RandomHorizontalFlip(p=1),
+            T.Resize(size=(64, 64)),
+            T.ToTensor(),
+        ])
+        self.transform_vertical_flip = T.Compose([
+            T.ToPILImage(),
+            T.RandomVerticalFlip(p=1),
+            T.Resize(size=(64, 64)),
+            T.ToTensor(),
+        ])
+        self.transform_test = T.Compose([
             T.ToPILImage(),
             T.ToTensor(),
-            # T.Normalize((0.1307,), (0.3081,))
         ])
-
-        # self.test_target_transform = T.Compose([
-        #     T.ToPILImage(),
-        #     T.ToTensor(),
-        # ])
 
     def __len__(self):
         return len(self.data)
@@ -93,26 +78,31 @@ class subDataset(Dataset):
         # print(idx)
         txtline = self.data[idx]
         # 随机变速
-        video = self.data_npy[txtline[0], txtline[1:], :, :]  # 中间interval * 2列是data,最后一列是target
-
-        data_temp = torch.zeros(video.shape)
+        video = self.data_npy[txtline[0], txtline[1:], :, :]  # 前边interval * 2列是data,后面的列是target
+        seq_len, H, W = video.shape
+        data_temp = torch.zeros(video.shape)  # [interval * 2 + cfg.target_num , H, W]
+        crop_h_size, crop_w_size = H // 2, W // 2
+        x = np.random.randint(0, H - crop_h_size + 1)
+        y = np.random.randint(0, H - crop_w_size + 1)
         if self.isTrain:
-            # seed = int(time.time())
-            for i in range(video.shape[0]):
-                data_temp[i] = self.train_data_transform(np.expand_dims(video[i], axis=-1))
+            image_crop = video[:, x:x + crop_h_size, y:y + crop_w_size]
+            if random.randint(-2, 1):
+                for i in range(seq_len):
+                    data_temp[i] = self.transform_rotation_180(image_crop[i])    # rotation 180
+            elif random.randint(-2, 1):
+                for i in range(seq_len):
+                    data_temp[i] = self.transform_horizontal_flip(image_crop[i])    # horizontal flip
+            elif random.randint(-2, 1):
+                for i in range(seq_len):
+                    data_temp[i] = self.transform_vertical_flip(image_crop[i])  # vertical flip
 
         else:
-            for i in range(video.shape[0] - 1):
-                data_temp[i] = self.test_data_transform(np.expand_dims(video[i], axis=-1))
+            for i in range(seq_len):
+                data_temp[i] = self.transform_test(video[i])
             # data_temp[-1] = self.test_target_transform(np.expand_dims(video[-1], axis=-1))
 
-        data = data_temp[:-1, :, :].unsqueeze(1)
-        target = data_temp[-1, :, :].unsqueeze(0).unsqueeze(1)
-        # print(data.shape)
-        # print(target.shape)
-        # print(data.unique())
-        # print(target.unique())
-        # exit()
+        data = data_temp[:cfg.interval*2, :, :].unsqueeze(1)
+        target = data_temp[cfg.interval*2:, :, :].unsqueeze(1)
         return data, target
 
 
@@ -167,6 +157,7 @@ class subDataset_demo(Dataset):
         data = data_temp[:-1, :, :]
         target = data_temp[-1, :, :].unsqueeze(0)
 
+
         return data, target
 
 
@@ -207,7 +198,7 @@ if __name__ == '__main__':
     # it = subdataset.__getitem__(10)
 
     subdataset = subDataset(data_txt='data/train_2.txt', data_npy='data/mnist_train.npy',
-                                 isTrain=True)
+                            isTrain=False)
     it = subdataset.__getitem__(0)
 
     # subdataset = subDataset_demo(12, data_txt_path='data/test_2.txt', data_npy_path='data/mnist_test.npy',

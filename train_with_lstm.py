@@ -317,7 +317,7 @@ def train_bidirec(epoch, record, result, train_dataloader, loss_num_per_epoch):
                 lstm_rev_input = decoder_reverse_pred
         inter_for = torch.stack(forward_list, dim=1)
         inter_rev = torch.stack(reverse_list, dim=1)
-        inter_pred = cfg.epsilon * inter_for + inter_rev * inter_rev
+        inter_pred = cfg.epsilon * inter_for + (1 - cfg.epsilon) * inter_rev
         ssim_train.append(ssim(inter_pred, y_train))
         psnr_train.append(psnr(inter_pred, y_train))
         optimizer_bi.zero_grad()
@@ -408,12 +408,12 @@ def test_bidirec(epoch, record, result, test_dataloader, loss_num_per_epoch):
         inter_rev = torch.stack(reverse_list, dim=1)
         inter_pred = cfg.epsilon * inter_for + (1 - cfg.epsilon) * inter_rev
         ssim_test.append(ssim(inter_pred, y_test))
-        psnr_test.append(ssim(inter_pred, y_test))
+        psnr_test.append(psnr(inter_pred, y_test))
 
     ssim_test_mean = np.stack(ssim_test, axis=0).mean()
     psnr_test_mean = np.stack(psnr_test, axis=0).mean()
     loss_test = loss / (len(test_dataloader) * loss_num_per_epoch)
-    scheduler_uni.step(loss)
+    scheduler_bi.step(loss)
 
     record.add_scalar('Loss_Test', loss_test, epoch)
     record.add_scalar('SSIM_Test', ssim_test_mean, epoch)
@@ -484,7 +484,7 @@ if __name__ == '__main__':
     best_psnr = 0.0
     best_ssim = 0.0
     best_epoch = 0
-    if cfg.name == 'UnidirecLSTM':      # unidirection
+    if cfg.name == 'UnidirecLSTM':  # unidirection
         convlstm_forward = ConvLSTM(input_shape=(16, 16), input_dim=64, hidden_dims=[128, 128, 64], n_layers=3,
                                     kernel_size=(3, 3),
                                     device=device)
