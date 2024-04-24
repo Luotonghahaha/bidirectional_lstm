@@ -27,5 +27,6 @@ para = {
     'learning_rate': 1e-4,
     'hidden_rnn': 512,
     'epsilon': 0.5,
+    'name': 'BidirecRNN'
 }
 cfg = EasyDict(para)
