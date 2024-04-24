@@ -7,6 +7,7 @@ import torch
 import torch.nn as nn
 # from skimage.metrics import peak_signal_noise_ratio as psnr
 # from skimage.metrics import structural_similarity as ssim
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
@@ -24,9 +25,9 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # train_data_seq, train_target_inter, test_data_seq, test_target_inter = data_pro.make_data()
 # dataset_train = subDataset(train_data_seq, train_target_inter)
 # dataset_test = subDataset(test_data_seq, test_target_inter)
-dataset_train = subDataset(data_txt='./data/train.txt', data_npy='./data/mnist_train.npy', isTrain=True)
-dataset_val = subDataset(data_txt='./data/val.txt', data_npy='./data/mnist_val.npy', isTrain=False)
-dataset_test = subDataset(data_txt='./data/test.txt', data_npy='./data/mnist_test.npy', isTrain=False)
+dataset_train = subDataset(data_txt=cfg.train_path, data_npy=cfg.train_npy_path, isTrain=True)
+dataset_val = subDataset(data_txt=cfg.val_path, data_npy=cfg.val_npy_path, isTrain=False)
+dataset_test = subDataset(data_txt=cfg.test_path, data_npy=cfg.test_npy_path, isTrain=False)
 
 # dataset_train = subDataset(data_path='./data', split='train', interval=3)
 # dataset_test = subDataset(data_path='./data', split='test', interval=3)
@@ -39,16 +40,16 @@ test_dataloader = DataLoader(dataset=dataset_test, batch_size=cfg.batch_size, sh
 print('All data is ready!')
 
 
-def lr_scheduler(opt, epoch, lr_decay_epoch=50):
-    """Decay learning rate by a factor of 0.1 every lr_decay_epoch epochs."""
-    if (epoch + 1) % lr_decay_epoch == 0:
-        if opt == 'optimizer_uni':
-            for param_group in opt.param_groups:
-                param_group['lr'] = param_group['lr'] * 0.1
-        elif opt == 'optimizer_bi':
-            for param_group in opt.param_groups:
-                param_group['lr'] = param_group['lr'] * 0.1
-    return opt
+# def lr_scheduler(opt, epoch, lr_decay_epoch=50):
+#     """Decay learning rate by a factor of 0.1 every lr_decay_epoch epochs."""
+#     if (epoch + 1) % lr_decay_epoch == 0:
+#         if opt == 'optimizer_uni':
+#             for param_group in opt.param_groups:
+#                 param_group['lr'] = param_group['lr'] * 0.1
+#         elif opt == 'optimizer_bi':
+#             for param_group in opt.param_groups:
+#                 param_group['lr'] = param_group['lr'] * 0.1
+#     return opt
 
 
 # 训练单向RNN: 分别由前后各interval帧生成中间1帧,然后将两个结果加权组合
@@ -126,7 +127,6 @@ def train_unidirec(epoch, record, result, train_dataloader, loss_num_per_epoch):
     # print(f'Epoch {epoch}/{cfg.epochs}, Loss: {loss_sum / (i + 1):.4f},\
     #         SSIM: {ssim_sum / (i + 1):.2f}, PSNR: {psnr_sum / (i + 1):.2f},\
     #         IE: {psnr_sum / (i + 1):.2f}')
-    lr_scheduler(optimizer_uni, epoch)
     print(
         f'Train on Epoch {epoch}/{cfg.epochs}, Loss: {loss_train:.4f}, SSIM: {ssim_mean_epoch :.4f}, PSNR: {psnr_mean_epoch :.4f}')
     result.write(
@@ -192,6 +192,7 @@ def test_unidirec(epoch, record, result, test_dataloader, loss_num_per_epoch):
     ssim_test_mean = np.array(ssim_test).mean()
     psnr_test_mean = np.array(psnr_test).mean()
     loss_test = loss / (len(test_dataloader) * loss_num_per_epoch)
+    scheduler_uni.step(loss)
 
     record.add_scalar('Loss_Test', loss_test, epoch)
     record.add_scalar('SSIM_Test', ssim_test_mean, epoch)
@@ -335,7 +336,6 @@ def train_bidirec(epoch, record, result, train_dataloader, loss_num_per_epoch):
     # print(f'Epoch {epoch}/{cfg.epochs}, Loss: {loss_sum / (i + 1):.4f},\
     #         SSIM: {ssim_sum / (i + 1):.2f}, PSNR: {psnr_sum / (i + 1):.2f},\
     #         IE: {psnr_sum / (i + 1):.2f}')
-    lr_scheduler(optimizer_bi, epoch)
     print(
         f'Train on Epoch {epoch}/{cfg.epochs}, Loss: {loss_train:.4f}, SSIM: {ssim_mean_epoch :.4f}, PSNR: {psnr_mean_epoch :.4f}')
     result.write(
@@ -413,6 +413,7 @@ def test_bidirec(epoch, record, result, test_dataloader, loss_num_per_epoch):
     ssim_test_mean = np.stack(ssim_test, axis=0).mean()
     psnr_test_mean = np.stack(psnr_test, axis=0).mean()
     loss_test = loss / (len(test_dataloader) * loss_num_per_epoch)
+    scheduler_uni.step(loss)
 
     record.add_scalar('Loss_Test', loss_test, epoch)
     record.add_scalar('SSIM_Test', ssim_test_mean, epoch)
@@ -493,6 +494,7 @@ if __name__ == '__main__':
         params_uni = (list(encoder.parameters()) + list(convlstm_forward.parameters()) + list(
             decoder.parameters()))
         optimizer_uni = torch.optim.Adam(params_uni, lr=cfg.learning_rate, weight_decay=cfg.weight_decay)
+        scheduler_uni = ReduceLROnPlateau(optimizer_uni, mode='min', patience=2, factor=0.1, verbose=True)
         print('training with UnidirectLSTM!')
         with open(record_file, 'a') as result:
             for e in range(cfg.epochs):
@@ -529,7 +531,7 @@ if __name__ == '__main__':
         param_bi = (list(encoder.parameters()) + list(convlstm_forward.parameters()) + list(
             convlstm_reverse.parameters()) + list(decoder.parameters()))
         optimizer_bi = torch.optim.Adam(param_bi, lr=cfg.learning_rate, weight_decay=cfg.weight_decay)
-
+        scheduler_bi = ReduceLROnPlateau(optimizer_bi, mode='min', patience=2, factor=0.1, verbose=True)
         # 定义全局最优pnsr和ssim，以及对应的epoch
         print('training on BidirecLSTM')
         with open(record_file, 'a') as result:
