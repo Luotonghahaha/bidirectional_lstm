@@ -66,7 +66,7 @@ def train_unidirec(epoch, record, result, train_dataloader, loss_num_per_epoch):
     for i, data in tqdm(enumerate(train_dataloader), total=len(train_dataloader)):
         loss = 0.0
         x_train, y_train = data[0].to(device), data[1].to(device)  # [B, T, C, H, W]
-        x_T, y_T = x_train.shape[1], y_train.shape[1]
+        # x_T, y_T = x_train.shape[1], y_train.shape[1]
         pred_list = []
         ssim_value = 0.0
         # 对target之前的数据逐帧预测
@@ -81,7 +81,7 @@ def train_unidirec(epoch, record, result, train_dataloader, loss_num_per_epoch):
 
         # 对target逐帧预测，第一帧是target前的最后一帧
         lstm_for_input = x_train[:, cfg.interval - 1]  # 正向预测的第一帧由预测的前一帧输入得到
-        for ti in range(y_T):
+        for ti in range(cfg.target_num):
             # print('forward prediction')
             encoder_forward_pred = encoder(lstm_for_input)
             hidden_forward_pred, output_forward_pred = convlstm_forward(encoder_forward_pred, ti == 0)
@@ -148,7 +148,7 @@ def test_unidirec(epoch, record, result, test_dataloader, loss_num_per_epoch):
     for i, data in tqdm(enumerate(test_dataloader), total=len(test_dataloader)):
         loss = 0.0
         x_test, y_test = data[0].to(device), data[1].to(device)  # [B, T, C, H, W]
-        x_T, y_T = x_test.shape[1], y_test.shape[1]
+        # x_T, y_T = x_test.shape[1], y_test.shape[1]
         pred_list = []
         ssim_value = 0.0
         # 对target之前的数据逐帧预测
@@ -163,7 +163,7 @@ def test_unidirec(epoch, record, result, test_dataloader, loss_num_per_epoch):
 
         # 对target逐帧预测，第一帧是target前的最后一帧
         lstm_for_input = x_test[:, cfg.interval - 1]  # 正向预测的第一帧由预测的前一帧输入得到
-        for ti in range(y_T):
+        for ti in range(cfg.target_num):
             # print('forward prediction')
             encoder_forward_pred = encoder(lstm_for_input)
             hidden_forward_pred, output_forward_pred = convlstm_forward(encoder_forward_pred, ti == 0)
@@ -189,8 +189,8 @@ def test_unidirec(epoch, record, result, test_dataloader, loss_num_per_epoch):
         ssim_test.append(ssim(inter_pred, y_test))
         psnr_test.append(psnr(inter_pred, y_test))
 
-    ssim_test_mean = np.array(ssim_test).mean()
-    psnr_test_mean = np.array(psnr_test).mean()
+    ssim_test_mean = np.stack(ssim_test, axis=0).mean()
+    psnr_test_mean = np.stack(psnr_test, axis=0).mean()
     loss_test = loss / (len(test_dataloader) * loss_num_per_epoch)
     scheduler_uni.step(loss)
 
@@ -275,17 +275,17 @@ def train_bidirec(epoch, record, result, train_dataloader, loss_num_per_epoch):
         # reverse: t+1(in_gt)->t(in_pred), 其中t>interval
         for ij in range(cfg.interval - 1):
             # print('reverse_input')
-            encoder_output2 = encoder(x_train[:, x_T - 1 - ij])
+            encoder_output2 = encoder(x_train[:, cfg.interval * 2 - 1 - ij])
             hidden2, output2 = convlstm_forward(encoder_output2, ij == 0)
             decoder_output1 = decoder(output2[-1])
-            loss_reverse = criterion(decoder_output1, x_train[:, x_T - 2 - ij])
+            loss_reverse = criterion(decoder_output1, x_train[:, cfg.interval * 2 - 2 - ij])
 
             # print(loss_reverse)
             loss += loss_reverse
 
         # forward pred
         lstm_for_input = x_train[:, cfg.interval - 1]  # 正向预测的第一帧由预测的前一帧输入得到
-        for ti in range(y_T):
+        for ti in range(cfg.target_num):
             # print('forward prediction')
             encoder_forward_pred = encoder(lstm_for_input)
             hidden_forward_pred, output_forward_pred = convlstm_forward(encoder_forward_pred, True)
@@ -302,17 +302,17 @@ def train_bidirec(epoch, record, result, train_dataloader, loss_num_per_epoch):
 
         # reverse: 对target逐帧从后往前进行预测
         lstm_rev_input = x_train[:, cfg.interval]  # 反向预测的第一帧由预测的后一帧输入得到
-        for tj in range(y_T):
+        for tj in range(cfg.target_num):
             # print('reverse prediction')
             encoder_reverse_pred = encoder(lstm_rev_input)
             hidden_reverse_pred, output_reverse_pred = convlstm_reverse(encoder_reverse_pred, True)
             decoder_reverse_pred = decoder(output_reverse_pred[-1])
             reverse_list.append(decoder_reverse_pred)
-            loss += criterion(decoder_reverse_pred, y_train[:, y_T - 1 - tj])
+            loss += criterion(decoder_reverse_pred, y_train[:, cfg.target_num - 1 - tj])
 
             use_teacher_forcing = True if random.random() < teacher_forcing_ratio else False
             if use_teacher_forcing:
-                lstm_rev_input = y_train[:, y_T - 1 - tj]
+                lstm_rev_input = y_train[:, cfg.target_num - 1 - tj]
             else:
                 lstm_rev_input = decoder_reverse_pred
         inter_for = torch.stack(forward_list, dim=1)

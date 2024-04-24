@@ -34,18 +34,18 @@ class subDataset(Dataset):
         self.isTrain = isTrain
         self.data_npy = np.load(data_npy)
         self.data = []
-        # datatemp = open(data_txt, 'r').readlines()
-        datatemp = open(data_txt, 'r')
 
-        # # 获取所有数据集
-        # for line in datatemp:
-        #     self.data.append([int(i) for i in line.strip().split(',')])
-        #     # print([int(i) for i in line.strip().split(',')])
-        #     # print(self.data)
+        # 获取所有数据集
+        datatemp = open(data_txt, 'r').readlines()
+        for line in datatemp:
+            self.data.append([int(i) for i in line.strip().split(',')])
+            # print([int(i) for i in line.strip().split(',')])
+            # print(self.data)
 
-        # 用500个样本做测试
-        for i in range(500):
-            self.data.append([int(i) for i in datatemp.readline().strip().split(',')])
+        # # 用500个样本做测试
+        # datatemp = open(data_txt, 'r')
+        # for i in range(500):
+        #     self.data.append([int(i) for i in datatemp.readline().strip().split(',')])
 
         self.transform_rotation_180 = T.Compose([
             T.ToPILImage(),
