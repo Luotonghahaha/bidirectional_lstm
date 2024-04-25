@@ -4,8 +4,7 @@ import time
 
 import numpy as np
 import torch
-import torch.nn as nn
-# from skimage.metrics import peak_signal_noise_ratio as psnr
+import torch.nn as nn # from skimage.metrics import peak_signal_noise_ratio as psnr
 # from skimage.metrics import structural_similarity as ssim
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader
@@ -32,11 +31,11 @@ dataset_test = subDataset(data_txt=cfg.test_path, data_npy=cfg.test_npy_path, is
 # dataset_train = subDataset(data_path='./data', split='train', interval=3)
 # dataset_test = subDataset(data_path='./data', split='test', interval=3)
 train_dataloader = DataLoader(dataset=dataset_train, batch_size=cfg.batch_size, shuffle=True,
-                              num_workers=0, drop_last=True, prefetch_factor=2)
+                              num_workers=4, drop_last=True, prefetch_factor=2)
 val_dataloader = DataLoader(dataset=dataset_val, batch_size=cfg.batch_size, shuffle=False,
-                            num_workers=0, drop_last=True, prefetch_factor=2)
+                            num_workers=4, drop_last=True, prefetch_factor=2)
 test_dataloader = DataLoader(dataset=dataset_test, batch_size=cfg.batch_size, shuffle=False,
-                             num_workers=0, drop_last=True, prefetch_factor=2)
+                             num_workers=4, drop_last=True, prefetch_factor=2)
 print('All data is ready!')
 
 

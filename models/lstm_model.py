@@ -139,7 +139,7 @@ class ConvLSTM(nn.Module):
             cell_list.append(ConvLSTM_Cell(input_shape=self.input_shape,
                                            input_dim=cur_input_dim,
                                            hidden_dim=self.hidden_dims[i],
-                                           kernel_size=self.kernel_size))
+                                           kernel_size=self.kernel_size).to(device))
         self.cell_list = nn.ModuleList(cell_list)
 
     def forward(self, input_, first_timestep=False):  # input_ [batch_size, 1, channels, width, height]
