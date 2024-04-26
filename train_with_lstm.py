@@ -151,38 +151,39 @@ def test_unidirec(epoch, record, result, test_dataloader, loss_num_per_epoch):
         pred_list = []
         ssim_value = 0.0
         # 对target之前的数据逐帧预测
-        for ii in range(cfg.interval - 1):
-            # print('forward_input')
-            encoder_output1 = encoder(x_test[:, ii])
-            hidden1, output1 = convlstm_forward(encoder_output1, ii == 0)
-            decoder_output1 = decoder(output1[-1])
-            loss_before = criterion(decoder_output1, x_test[:, ii + 1])
-            # print(loss_forward)
-            loss += loss_before
+        with torch.no_grad():
+            for ii in range(cfg.interval - 1):
+                # print('forward_input')
+                encoder_output1 = encoder(x_test[:, ii])
+                hidden1, output1 = convlstm_forward(encoder_output1, ii == 0)
+                decoder_output1 = decoder(output1[-1])
+                loss_before = criterion(decoder_output1, x_test[:, ii + 1])
+                # print(loss_forward)
+                loss += loss_before
 
-        # 对target逐帧预测，第一帧是target前的最后一帧
-        lstm_for_input = x_test[:, cfg.interval - 1]  # 正向预测的第一帧由预测的前一帧输入得到
-        for ti in range(cfg.target_num):
-            # print('forward prediction')
-            encoder_forward_pred = encoder(lstm_for_input)
-            hidden_forward_pred, output_forward_pred = convlstm_forward(encoder_forward_pred, ti == 0)
-            decoder_forward_pred = decoder(output_forward_pred[-1])
-            pred_list.append(decoder_forward_pred)
-            loss += criterion(decoder_forward_pred, y_test[:, ti])
-            # print(loss_forward_pred)
-            lstm_for_input = decoder_forward_pred
+            # 对target逐帧预测，第一帧是target前的最后一帧
+            lstm_for_input = x_test[:, cfg.interval - 1]  # 正向预测的第一帧由预测的前一帧输入得到
+            for ti in range(cfg.target_num):
+                # print('forward prediction')
+                encoder_forward_pred = encoder(lstm_for_input)
+                hidden_forward_pred, output_forward_pred = convlstm_forward(encoder_forward_pred, ti == 0)
+                decoder_forward_pred = decoder(output_forward_pred[-1])
+                pred_list.append(decoder_forward_pred)
+                loss += criterion(decoder_forward_pred, y_test[:, ti])
+                # print(loss_forward_pred)
+                lstm_for_input = decoder_forward_pred
 
-        # 对target后的帧逐帧预测，第一帧是target的最后一帧
-        pred_for_after = y_test[:, -1]
-        for ij in range(cfg.interval):
-            # print('reverse_input')
-            encoder_output2 = encoder(pred_for_after)
-            hidden2, output2 = convlstm_forward(encoder_output2, ij == 0)
-            decoder_output1 = decoder(output2[-1])
-            loss_reverse = criterion(decoder_output1, x_test[:, cfg.interval + ij])
-            # print(loss_reverse)
-            loss += loss_reverse
-            pred_for_after = x_test[:, cfg.interval + ij]
+            # 对target后的帧逐帧预测，第一帧是target的最后一帧
+            pred_for_after = y_test[:, -1]
+            for ij in range(cfg.interval):
+                # print('reverse_input')
+                encoder_output2 = encoder(pred_for_after)
+                hidden2, output2 = convlstm_forward(encoder_output2, ij == 0)
+                decoder_output1 = decoder(output2[-1])
+                loss_reverse = criterion(decoder_output1, x_test[:, cfg.interval + ij])
+                # print(loss_reverse)
+                loss += loss_reverse
+                pred_for_after = x_test[:, cfg.interval + ij]
 
         inter_pred = torch.stack(pred_list, dim=1)  # [B, T, C, H, W]
         ssim_test.append(ssim(inter_pred, y_test))
