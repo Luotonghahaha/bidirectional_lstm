@@ -35,17 +35,17 @@ class subDataset(Dataset):
         self.data_npy = np.load(data_npy)
         self.data = []
 
-        # # 获取所有数据集
-        # datatemp = open(data_txt, 'r').readlines()
-        # for line in datatemp:
-        #     self.data.append([int(i) for i in line.strip().split(',')])
-        #     # print([int(i) for i in line.strip().split(',')])
-        #     # print(self.data)
+        # 获取所有数据集
+        datatemp = open(data_txt, 'r').readlines()
+        for line in datatemp:
+            self.data.append([int(i) for i in line.strip().split(',')])
+            # print([int(i) for i in line.strip().split(',')])
+            # print(self.data)
 
-        # 用500个样本做测试
-        datatemp = open(data_txt, 'r')
-        for i in range(500):
-            self.data.append([int(i) for i in datatemp.readline().strip().split(',')])
+        # # 用500个样本做测试
+        # datatemp = open(data_txt, 'r')
+        # for i in range(500):
+        #     self.data.append([int(i) for i in datatemp.readline().strip().split(',')])
 
         self.transform_rotation_180 = T.Compose([
             T.ToPILImage(),
@@ -58,14 +58,12 @@ class subDataset(Dataset):
             T.ToPILImage(),
             T.RandomApply([T.RandomResizedCrop(size=(64, 64))], p=0.3),
             T.RandomHorizontalFlip(p=1),
-            T.Resize(size=(64, 64)),
             T.ToTensor(),
         ])
         self.transform_vertical_flip = T.Compose([
             T.ToPILImage(),
             T.RandomApply([T.RandomResizedCrop(size=(64, 64))], p=0.3),
             T.RandomVerticalFlip(p=1),
-            T.Resize(size=(64, 64)),
             T.ToTensor(),
         ])
         self.transform_test = T.Compose([
