@@ -49,21 +49,21 @@ class subDataset(Dataset):
 
         self.transform_rotation_180 = T.Compose([
             T.ToPILImage(),
-            T.RandomApply([T.RandomResizedCrop(size=(64, 64))], p=0.5),
+            T.RandomApply([T.RandomResizedCrop(size=(64, 64))], p=0.3),
             T.RandomHorizontalFlip(p=1),
             T.RandomVerticalFlip(p=1),
             T.ToTensor(),
         ])
         self.transform_horizontal_flip = T.Compose([
             T.ToPILImage(),
-            T.RandomApply([T.RandomResizedCrop(size=(64, 64))], p=0.5),
+            T.RandomApply([T.RandomResizedCrop(size=(64, 64))], p=0.3),
             T.RandomHorizontalFlip(p=1),
             T.Resize(size=(64, 64)),
             T.ToTensor(),
         ])
         self.transform_vertical_flip = T.Compose([
             T.ToPILImage(),
-            T.RandomApply([T.RandomResizedCrop(size=(64, 64))], p=0.5),
+            T.RandomApply([T.RandomResizedCrop(size=(64, 64))], p=0.3),
             T.RandomVerticalFlip(p=1),
             T.Resize(size=(64, 64)),
             T.ToTensor(),

@@ -74,9 +74,8 @@ def train_unidirec(epoch, record, result, train_dataloader, loss_num_per_epoch):
             encoder_output1 = encoder(x_train[:, ii])
             hidden1, output1 = convlstm_forward(encoder_output1, ii == 0)
             decoder_output1 = decoder(output1[-1])
-            loss_before = criterion(decoder_output1, x_train[:, ii + 1])
+            loss += criterion(decoder_output1, x_train[:, ii + 1])
             # print(loss_forward)
-            loss += loss_before
 
         # 对target逐帧预测，第一帧是target前的最后一帧
         lstm_for_input = x_train[:, cfg.interval - 1]  # 正向预测的第一帧由预测的前一帧输入得到
@@ -145,9 +144,9 @@ def test_unidirec(epoch, record, result, test_dataloader, loss_num_per_epoch):
                 encoder_output1 = encoder(x_test[:, ii])
                 hidden1, output1 = convlstm_forward(encoder_output1, ii == 0)
                 decoder_output1 = decoder(output1[-1])
-                loss_before = criterion(decoder_output1, x_test[:, ii + 1])
+                loss += criterion(decoder_output1, x_test[:, ii + 1])
                 # print(loss_forward)
-                loss += loss_before
+
 
             # 对target逐帧预测，第一帧是target前的最后一帧
             lstm_for_input = x_test[:, cfg.interval - 1]  # 正向预测的第一帧由预测的前一帧输入得到
@@ -237,7 +236,6 @@ def train_bidirec(epoch, record, result, train_dataloader, loss_num_per_epoch):
     for i, data in tqdm(enumerate(train_dataloader), total=len(train_dataloader)):
         loss = 0.0
         x_train, y_train = data[0].to(device), data[1].to(device)
-        x_T, y_T = x_train.shape[1], y_train.shape[1]
         forward_list = []
         reverse_list = []
         ssim_value = 0.0
@@ -256,10 +254,8 @@ def train_bidirec(epoch, record, result, train_dataloader, loss_num_per_epoch):
             encoder_output2 = encoder(x_train[:, cfg.interval * 2 - 1 - ij])
             hidden2, output2 = convlstm_forward(encoder_output2, ij == 0)
             decoder_output1 = decoder(output2[-1])
-            loss_reverse = criterion(decoder_output1, x_train[:, cfg.interval * 2 - 2 - ij])
-
+            loss += criterion(decoder_output1, x_train[:, cfg.interval * 2 - 2 - ij])
             # print(loss_reverse)
-            loss += loss_reverse
 
         # forward pred
         lstm_for_input = x_train[:, cfg.interval - 1]  # 正向预测的第一帧由预测的前一帧输入得到
@@ -335,7 +331,6 @@ def test_bidirec(epoch, record, result, test_dataloader, loss_num_per_epoch):
     with torch.no_grad():
         for i, data in tqdm(enumerate(test_dataloader), total=len(test_dataloader)):
             x_test, y_test = data[0].to(device), data[1].to(device)
-            x_T, y_T = x_test.shape[1], y_test.shape[1]
             forward_list = []
             reverse_list = []
             ssim_value = 0.0
@@ -351,17 +346,17 @@ def test_bidirec(epoch, record, result, test_dataloader, loss_num_per_epoch):
             # reverse: t+1(in_gt)->t(in_pred), 其中t>interval
             for ij in range(cfg.interval - 1):
                 # print('reverse_input')
-                encoder_output2 = encoder(x_test[:, x_T - 1 - ij])
+                encoder_output2 = encoder(x_test[:, cfg.interval * 2 - 1 - ij])
                 hidden2, output2 = convlstm_forward(encoder_output2, ij == 0)
                 decoder_output1 = decoder(output2[-1])
-                loss_reverse = criterion(decoder_output1, x_test[:, x_T - 2 - ij])
+                loss_reverse = criterion(decoder_output1, x_test[:, cfg.interval * 2 - 2 - ij])
 
                 # print(loss_reverse)
                 loss += loss_reverse
 
             # forward pred
             lstm_for_input = x_test[:, cfg.interval - 1]  # 正向预测的第一帧由预测的前一帧输入得到
-            for ti in range(y_test.shape[1]):
+            for ti in range(cfg.target_num):
                 # print('forward prediction')
                 encoder_forward_pred = encoder(lstm_for_input)
                 hidden_forward_pred, output_forward_pred = convlstm_forward(encoder_forward_pred, True)
@@ -373,13 +368,13 @@ def test_bidirec(epoch, record, result, test_dataloader, loss_num_per_epoch):
 
             # reverse: 对target逐帧从后往前进行预测
             lstm_rev_input = x_test[:, cfg.interval]  # 反向预测的第一帧由预测的后一帧输入得到
-            for tj in range(y_test.shape[1]):
+            for tj in range(cfg.target_num):
                 # print('reverse prediction')
                 encoder_reverse_pred = encoder(lstm_rev_input)
                 hidden_reverse_pred, output_reverse_pred = convlstm_reverse(encoder_reverse_pred, True)
                 decoder_reverse_pred = decoder(output_reverse_pred[-1])
                 reverse_list.append(decoder_reverse_pred)
-                loss += criterion(decoder_reverse_pred, y_test[:, y_T - 1 - tj])
+                loss += criterion(decoder_reverse_pred, y_test[:, cfg.target_num - 1 - tj])
                 lstm_rev_input = decoder_reverse_pred
 
             inter_for = torch.stack(forward_list, dim=1)
@@ -391,7 +386,7 @@ def test_bidirec(epoch, record, result, test_dataloader, loss_num_per_epoch):
         ssim_test_mean = np.stack(ssim_test, axis=0).mean()
         psnr_test_mean = np.stack(psnr_test, axis=0).mean()
         loss_test = loss / (len(test_dataloader) * loss_num_per_epoch)
-        scheduler_bi.step(loss)
+        scheduler_bi.step(loss_test)
 
         record.add_scalar('Loss_Test', loss_test, epoch)
         record.add_scalar('SSIM_Test', ssim_test_mean, epoch)
@@ -450,7 +445,7 @@ if __name__ == '__main__':
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     criterion = nn.MSELoss().to(device)
     # 'interval': 2, 'target_num': 1, cfg.name = 'BidirecRNN'
-    loss_num_per_epoch = (cfg.interval - 1) * 2 + cfg.target_num * 2
+    loss_num_per_epoch = cfg.interval - 1 + cfg.target_num
     seed = int(time.time())
     save_path = f'./Logs/{cfg.name}_{seed}'  # 保存模型
     if not os.path.exists(save_path):
@@ -516,9 +511,9 @@ if __name__ == '__main__':
             for e in range(cfg.epochs):
                 result = open(record_file, 'a')
 
-                train_bidirec(e + 1, record, result, train_dataloader, loss_num_per_epoch)
+                train_bidirec(e + 1, record, result, train_dataloader, loss_num_per_epoch * 2)
                 # 在val数据上进行验证
-                test_bidirec(e + 1, record, result, val_dataloader, loss_num_per_epoch)
+                test_bidirec(e + 1, record, result, val_dataloader, loss_num_per_epoch * 2)
 
             # 保存最后一次的模型
             path_encoder = os.path.join(save_path, 'ckpt', f'last_encoder.pth')
@@ -533,6 +528,6 @@ if __name__ == '__main__':
             # 在test数据上进行测试
             print('Test on test dataset:')
             result.write('Test on test dataset:\n')
-            test_bidirec(cfg.epochs, record, result, test_dataloader, loss_num_per_epoch)
+            test_bidirec(cfg.epochs, record, result, test_dataloader, loss_num_per_epoch * 2)
             print('Accomplished!')
             result.write('Accomplished!')
