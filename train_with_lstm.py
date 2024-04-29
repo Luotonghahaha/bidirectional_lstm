@@ -31,11 +31,11 @@ dataset_test = subDataset(data_txt=cfg.test_path, data_npy=cfg.test_npy_path, is
 # dataset_train = subDataset(data_path='./data', split='train', interval=3)
 # dataset_test = subDataset(data_path='./data', split='test', interval=3)
 train_dataloader = DataLoader(dataset=dataset_train, batch_size=cfg.batch_size, shuffle=True,
-                              num_workers=4, drop_last=True, prefetch_factor=2)
+                              num_workers=0, drop_last=True, prefetch_factor=2)
 val_dataloader = DataLoader(dataset=dataset_val, batch_size=cfg.batch_size, shuffle=False,
-                            num_workers=4, drop_last=True, prefetch_factor=2)
+                            num_workers=0, drop_last=True, prefetch_factor=2)
 test_dataloader = DataLoader(dataset=dataset_test, batch_size=cfg.batch_size, shuffle=False,
-                             num_workers=4, drop_last=True, prefetch_factor=2)
+                             num_workers=0, drop_last=True, prefetch_factor=2)
 print('All data is ready!')
 
 
@@ -95,18 +95,6 @@ def train_unidirec(epoch, record, result, train_dataloader, loss_num_per_epoch):
             else:
                 lstm_for_input = decoder_forward_pred
 
-        # 对target后的帧逐帧预测，第一帧是target的最后一帧
-        pred_for_after = y_train[:, -1]
-        for ij in range(cfg.interval):
-            # print('reverse_input')
-            encoder_output2 = encoder(pred_for_after)
-            hidden2, output2 = convlstm_forward(encoder_output2, ij == 0)
-            decoder_output1 = decoder(output2[-1])
-            loss_reverse = criterion(decoder_output1, x_train[:, cfg.interval + ij])
-            # print(loss_reverse)
-            loss += loss_reverse
-            pred_for_after = x_train[:, cfg.interval + ij]
-
         inter_pred = torch.stack(pred_list, dim=1)  # [B, T, C, H, W]
         ssim_train.append(ssim(inter_pred, y_train))
         psnr_train.append(psnr(inter_pred, y_train))
@@ -134,7 +122,7 @@ def train_unidirec(epoch, record, result, train_dataloader, loss_num_per_epoch):
 
 def test_unidirec(epoch, record, result, test_dataloader, loss_num_per_epoch):
     global best_psnr, best_ssim, best_epoch
-    loss = 0.0
+    loss_test = 0.0
     ssim_test = []
     psnr_test = []
     ie_train = 0.0
@@ -173,26 +161,16 @@ def test_unidirec(epoch, record, result, test_dataloader, loss_num_per_epoch):
                 # print(loss_forward_pred)
                 lstm_for_input = decoder_forward_pred
 
-            # 对target后的帧逐帧预测，第一帧是target的最后一帧
-            pred_for_after = y_test[:, -1]
-            for ij in range(cfg.interval):
-                # print('reverse_input')
-                encoder_output2 = encoder(pred_for_after)
-                hidden2, output2 = convlstm_forward(encoder_output2, ij == 0)
-                decoder_output1 = decoder(output2[-1])
-                loss_reverse = criterion(decoder_output1, x_test[:, cfg.interval + ij])
-                # print(loss_reverse)
-                loss += loss_reverse
-                pred_for_after = x_test[:, cfg.interval + ij]
 
         inter_pred = torch.stack(pred_list, dim=1)  # [B, T, C, H, W]
         ssim_test.append(ssim(inter_pred, y_test))
         psnr_test.append(psnr(inter_pred, y_test))
+        loss_test += loss
 
     ssim_test_mean = np.stack(ssim_test, axis=0).mean()
     psnr_test_mean = np.stack(psnr_test, axis=0).mean()
-    loss_test = loss / (len(test_dataloader) * loss_num_per_epoch)
-    scheduler_uni.step(loss)
+    loss_test = loss_test / (len(test_dataloader) * loss_num_per_epoch)
+    scheduler_uni.step(loss_test)
 
     record.add_scalar('Loss_Test', loss_test, epoch)
     record.add_scalar('SSIM_Test', ssim_test_mean, epoch)
@@ -354,117 +332,117 @@ def test_bidirec(epoch, record, result, test_dataloader, loss_num_per_epoch):
     convlstm_forward.eval()
     convlstm_reverse.eval()
     decoder.eval()
+    with torch.no_grad():
+        for i, data in tqdm(enumerate(test_dataloader), total=len(test_dataloader)):
+            x_test, y_test = data[0].to(device), data[1].to(device)
+            x_T, y_T = x_test.shape[1], y_test.shape[1]
+            forward_list = []
+            reverse_list = []
+            ssim_value = 0.0
+            for ii in range(cfg.interval - 1):
+                # print('forward_input')
+                encoder_output1 = encoder(x_test[:, ii])
+                hidden1, output1 = convlstm_forward(encoder_output1, ii == 0)
+                decoder_output1 = decoder(output1[-1])
+                loss_forward = criterion(decoder_output1, x_test[:, ii + 1])
+                # print(loss_forward)
+                loss += loss_forward
 
-    for i, data in tqdm(enumerate(test_dataloader), total=len(test_dataloader)):
-        x_test, y_test = data[0].to(device), data[1].to(device)
-        x_T, y_T = x_test.shape[1], y_test.shape[1]
-        forward_list = []
-        reverse_list = []
-        ssim_value = 0.0
-        for ii in range(cfg.interval - 1):
-            # print('forward_input')
-            encoder_output1 = encoder(x_test[:, ii])
-            hidden1, output1 = convlstm_forward(encoder_output1, ii == 0)
-            decoder_output1 = decoder(output1[-1])
-            loss_forward = criterion(decoder_output1, x_test[:, ii + 1])
-            # print(loss_forward)
-            loss += loss_forward
+            # reverse: t+1(in_gt)->t(in_pred), 其中t>interval
+            for ij in range(cfg.interval - 1):
+                # print('reverse_input')
+                encoder_output2 = encoder(x_test[:, x_T - 1 - ij])
+                hidden2, output2 = convlstm_forward(encoder_output2, ij == 0)
+                decoder_output1 = decoder(output2[-1])
+                loss_reverse = criterion(decoder_output1, x_test[:, x_T - 2 - ij])
 
-        # reverse: t+1(in_gt)->t(in_pred), 其中t>interval
-        for ij in range(cfg.interval - 1):
-            # print('reverse_input')
-            encoder_output2 = encoder(x_test[:, x_T - 1 - ij])
-            hidden2, output2 = convlstm_forward(encoder_output2, ij == 0)
-            decoder_output1 = decoder(output2[-1])
-            loss_reverse = criterion(decoder_output1, x_test[:, x_T - 2 - ij])
+                # print(loss_reverse)
+                loss += loss_reverse
 
-            # print(loss_reverse)
-            loss += loss_reverse
+            # forward pred
+            lstm_for_input = x_test[:, cfg.interval - 1]  # 正向预测的第一帧由预测的前一帧输入得到
+            for ti in range(y_test.shape[1]):
+                # print('forward prediction')
+                encoder_forward_pred = encoder(lstm_for_input)
+                hidden_forward_pred, output_forward_pred = convlstm_forward(encoder_forward_pred, True)
+                decoder_forward_pred = decoder(output_forward_pred[-1])
+                forward_list.append(decoder_forward_pred)
+                loss += criterion(decoder_forward_pred, y_test[:, ti])
+                lstm_for_input = decoder_forward_pred
+                # print(loss_forward_pred)
 
-        # forward pred
-        lstm_for_input = x_test[:, cfg.interval - 1]  # 正向预测的第一帧由预测的前一帧输入得到
-        for ti in range(y_test.shape[1]):
-            # print('forward prediction')
-            encoder_forward_pred = encoder(lstm_for_input)
-            hidden_forward_pred, output_forward_pred = convlstm_forward(encoder_forward_pred, True)
-            decoder_forward_pred = decoder(output_forward_pred[-1])
-            forward_list.append(decoder_forward_pred)
-            loss += criterion(decoder_forward_pred, y_test[:, ti])
-            lstm_for_input = decoder_forward_pred
-            # print(loss_forward_pred)
+            # reverse: 对target逐帧从后往前进行预测
+            lstm_rev_input = x_test[:, cfg.interval]  # 反向预测的第一帧由预测的后一帧输入得到
+            for tj in range(y_test.shape[1]):
+                # print('reverse prediction')
+                encoder_reverse_pred = encoder(lstm_rev_input)
+                hidden_reverse_pred, output_reverse_pred = convlstm_reverse(encoder_reverse_pred, True)
+                decoder_reverse_pred = decoder(output_reverse_pred[-1])
+                reverse_list.append(decoder_reverse_pred)
+                loss += criterion(decoder_reverse_pred, y_test[:, y_T - 1 - tj])
+                lstm_rev_input = decoder_reverse_pred
 
-        # reverse: 对target逐帧从后往前进行预测
-        lstm_rev_input = x_test[:, cfg.interval]  # 反向预测的第一帧由预测的后一帧输入得到
-        for tj in range(y_test.shape[1]):
-            # print('reverse prediction')
-            encoder_reverse_pred = encoder(lstm_rev_input)
-            hidden_reverse_pred, output_reverse_pred = convlstm_reverse(encoder_reverse_pred, True)
-            decoder_reverse_pred = decoder(output_reverse_pred[-1])
-            reverse_list.append(decoder_reverse_pred)
-            loss += criterion(decoder_reverse_pred, y_test[:, y_T - 1 - tj])
-            lstm_rev_input = decoder_reverse_pred
+            inter_for = torch.stack(forward_list, dim=1)
+            inter_rev = torch.stack(reverse_list, dim=1)
+            inter_pred = cfg.epsilon * inter_for + (1 - cfg.epsilon) * inter_rev
+            ssim_test.append(ssim(inter_pred, y_test))
+            psnr_test.append(psnr(inter_pred, y_test))
 
-        inter_for = torch.stack(forward_list, dim=1)
-        inter_rev = torch.stack(reverse_list, dim=1)
-        inter_pred = cfg.epsilon * inter_for + (1 - cfg.epsilon) * inter_rev
-        ssim_test.append(ssim(inter_pred, y_test))
-        psnr_test.append(psnr(inter_pred, y_test))
+        ssim_test_mean = np.stack(ssim_test, axis=0).mean()
+        psnr_test_mean = np.stack(psnr_test, axis=0).mean()
+        loss_test = loss / (len(test_dataloader) * loss_num_per_epoch)
+        scheduler_bi.step(loss)
 
-    ssim_test_mean = np.stack(ssim_test, axis=0).mean()
-    psnr_test_mean = np.stack(psnr_test, axis=0).mean()
-    loss_test = loss / (len(test_dataloader) * loss_num_per_epoch)
-    scheduler_bi.step(loss)
+        record.add_scalar('Loss_Test', loss_test, epoch)
+        record.add_scalar('SSIM_Test', ssim_test_mean, epoch)
+        record.add_scalar('PSNR_Test', psnr_test_mean, epoch)
+        # record.add_scalar('IE_Train', ie_train, epoch)
+        # print(f'Epoch {epoch}/{cfg.epochs}, Loss: {loss_sum / (i + 1):.4f},\
+        #         SSIM: {ssim_sum / (i + 1):.2f}, PSNR: {psnr_sum / (i + 1):.2f},\
+        #         IE: {psnr_sum / (i + 1):.2f}')
+        print(
+            f'Test on Epoch {epoch}/{cfg.epochs}, Loss: {loss_test:.4f}, SSIM: {ssim_test_mean :.4f}, PSNR: {psnr_test_mean :.4f}')
+        result.write(
+            f'Test on Epoch {epoch}/{cfg.epochs}, Loss: {loss_test:.4f}, SSIM: {ssim_test_mean :.4f}, PSNR: {psnr_test_mean :.4f}')
+        if psnr_test_mean > best_psnr:
+            best_psnr = psnr_test_mean
+            best_epoch = epoch
+            # path = os.path.join(save_path, 'ckpt',
+            #                     f'Epoch{e}-psnr{psnr_eval}-ssim{ssim_eval}-ie{ie_eval}-Loss{loss}.pth')
+            print(f'best_psnr_epoch: {best_epoch}, best_psnr:{best_psnr:.4f}, ssim:{ssim_test_mean:.4f}')
+            result.write(f'best_psnr_epoch: {best_epoch}, best_psnr:{best_psnr:.4f}, ssim:{ssim_test_mean:.4f}\n')
+            path_encoder = os.path.join(save_path, 'ckpt', f'best_psnr_encoder.pth')
+            path_lstm_forward = os.path.join(save_path, 'ckpt', f'last_lstm_forward.pth')
+            path_lstm_reverse = os.path.join(save_path, 'ckpt', f'last_lstm_reverse.pth')
+            path_decoder = os.path.join(save_path, 'ckpt', f'best_psnr_decoder.pth')
 
-    record.add_scalar('Loss_Test', loss_test, epoch)
-    record.add_scalar('SSIM_Test', ssim_test_mean, epoch)
-    record.add_scalar('PSNR_Test', psnr_test_mean, epoch)
-    # record.add_scalar('IE_Train', ie_train, epoch)
-    # print(f'Epoch {epoch}/{cfg.epochs}, Loss: {loss_sum / (i + 1):.4f},\
-    #         SSIM: {ssim_sum / (i + 1):.2f}, PSNR: {psnr_sum / (i + 1):.2f},\
-    #         IE: {psnr_sum / (i + 1):.2f}')
-    print(
-        f'Test on Epoch {epoch}/{cfg.epochs}, Loss: {loss_test:.4f}, SSIM: {ssim_test_mean :.4f}, PSNR: {psnr_test_mean :.4f}')
-    result.write(
-        f'Test on Epoch {epoch}/{cfg.epochs}, Loss: {loss_test:.4f}, SSIM: {ssim_test_mean :.4f}, PSNR: {psnr_test_mean :.4f}')
-    if psnr_test_mean > best_psnr:
-        best_psnr = psnr_test_mean
-        best_epoch = epoch
-        # path = os.path.join(save_path, 'ckpt',
-        #                     f'Epoch{e}-psnr{psnr_eval}-ssim{ssim_eval}-ie{ie_eval}-Loss{loss}.pth')
-        print(f'best_psnr_epoch: {best_epoch}, best_psnr:{best_psnr:.4f}, ssim:{ssim_test_mean:.4f}')
-        result.write(f'best_psnr_epoch: {best_epoch}, best_psnr:{best_psnr:.4f}, ssim:{ssim_test_mean:.4f}\n')
-        path_encoder = os.path.join(save_path, 'ckpt', f'best_psnr_encoder.pth')
-        path_lstm_forward = os.path.join(save_path, 'ckpt', f'last_lstm_forward.pth')
-        path_lstm_reverse = os.path.join(save_path, 'ckpt', f'last_lstm_reverse.pth')
-        path_decoder = os.path.join(save_path, 'ckpt', f'best_psnr_decoder.pth')
+            torch.save({'state_dict': encoder.state_dict()}, path_encoder)
+            torch.save({'state_dict': convlstm_forward.state_dict()}, path_lstm_forward)
+            torch.save({'state_dict': convlstm_reverse.state_dict()}, path_lstm_reverse)
+            torch.save({'state_dict': decoder.state_dict()}, path_decoder)
+        else:
+            print(f'best_psnr_epoch: {best_epoch}, best_psnr:{best_psnr:.4f}')
+            result.write(f'best_psnr_epoch: {best_epoch}, best_psnr:{best_psnr:.4f}\n')
 
-        torch.save({'state_dict': encoder.state_dict()}, path_encoder)
-        torch.save({'state_dict': convlstm_forward.state_dict()}, path_lstm_forward)
-        torch.save({'state_dict': convlstm_reverse.state_dict()}, path_lstm_reverse)
-        torch.save({'state_dict': decoder.state_dict()}, path_decoder)
-    else:
-        print(f'best_psnr_epoch: {best_epoch}, best_psnr:{best_psnr:.4f}')
-        result.write(f'best_psnr_epoch: {best_epoch}, best_psnr:{best_psnr:.4f}\n')
+        if ssim_test_mean > best_ssim:
+            best_ssim = ssim_test_mean
+            best_epoch = epoch
+            # path = os.path.join(save_path, 'ckpt',
+            #                     f'Epoch{e}-psnr{psnr_eval}-ssim{ssim_eval}-ie{ie_eval}-Loss{loss}.pth')
+            print(f'best_ssim_epoch: {best_epoch}, psnr:{psnr_test_mean:.4f}, best_ssim:{best_ssim:.4f}')
+            result.write(f'best_ssim_epoch: {best_epoch}, psnr:{psnr_test_mean:.4f}, best_ssim:{best_ssim:.4f}\n')
+            path_encoder = os.path.join(save_path, 'ckpt', f'best_ssim_encoder.pth')
+            path_decoder = os.path.join(save_path, 'ckpt', f'best_ssim_decoder.pth')
+            path_lstm_forward = os.path.join(save_path, 'ckpt', f'last_lstm_forward.pth')
+            path_lstm_reverse = os.path.join(save_path, 'ckpt', f'last_lstm_reverse.pth')
 
-    if ssim_test_mean > best_ssim:
-        best_ssim = ssim_test_mean
-        best_epoch = epoch
-        # path = os.path.join(save_path, 'ckpt',
-        #                     f'Epoch{e}-psnr{psnr_eval}-ssim{ssim_eval}-ie{ie_eval}-Loss{loss}.pth')
-        print(f'best_ssim_epoch: {best_epoch}, psnr:{psnr_test_mean:.4f}, best_ssim:{best_ssim:.4f}')
-        result.write(f'best_ssim_epoch: {best_epoch}, psnr:{psnr_test_mean:.4f}, best_ssim:{best_ssim:.4f}\n')
-        path_encoder = os.path.join(save_path, 'ckpt', f'best_ssim_encoder.pth')
-        path_decoder = os.path.join(save_path, 'ckpt', f'best_ssim_decoder.pth')
-        path_lstm_forward = os.path.join(save_path, 'ckpt', f'last_lstm_forward.pth')
-        path_lstm_reverse = os.path.join(save_path, 'ckpt', f'last_lstm_reverse.pth')
-
-        torch.save({'state_dict': encoder.state_dict()}, path_encoder)
-        torch.save({'state_dict': convlstm_forward.state_dict()}, path_lstm_forward)
-        torch.save({'state_dict': convlstm_reverse.state_dict()}, path_lstm_reverse)
-        torch.save({'state_dict': decoder.state_dict()}, path_decoder)
-    else:
-        print(f'best_ssim_epoch: {best_epoch}, best_ssim:{best_ssim:.4f}')
-        result.write(f'best_ssim_epoch: {best_epoch}, best_ssim:{best_ssim:.4f}\n')
+            torch.save({'state_dict': encoder.state_dict()}, path_encoder)
+            torch.save({'state_dict': convlstm_forward.state_dict()}, path_lstm_forward)
+            torch.save({'state_dict': convlstm_reverse.state_dict()}, path_lstm_reverse)
+            torch.save({'state_dict': decoder.state_dict()}, path_decoder)
+        else:
+            print(f'best_ssim_epoch: {best_epoch}, best_ssim:{best_ssim:.4f}')
+            result.write(f'best_ssim_epoch: {best_epoch}, best_ssim:{best_ssim:.4f}\n')
 
 
 if __name__ == '__main__':

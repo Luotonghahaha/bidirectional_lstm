@@ -6,17 +6,17 @@ para = {
     'train_npy_path': './data/mnist_train.npy',
     'val_npy_path': './data/mnist_val.npy',
     'test_npy_path': './data/mnist_test.npy',
-    # 'train_path': './data/train_2.txt',
-    # 'val_path': './data/val_2.txt',
-    # 'test_path': './data/test_2.txt',
-    'train_path': './data/train.txt',
-    'val_path': './data/val.txt',
-    'test_path': './data/test.txt',
+    'train_path': './data/train_5.txt',
+    'val_path': './data/val_5.txt',
+    'test_path': './data/test_5.txt',
+    # 'train_path': './data/train.txt',
+    # 'val_path': './data/val.txt',
+    # 'test_path': './data/test.txt',
     'data_dir': './data',
     'save_path': './out',
     'batch_size': 64,
     'epochs': 300,
-    'interval': 2,
+    'interval': 5,
     'target_num': 1,
     'total_num': 10000,
     'train_share': 0.8,
@@ -27,6 +27,6 @@ para = {
     'learning_rate': 1e-3,
     'hidden_rnn': 512,
     'epsilon': 0.5,
-    'name': 'BidirecLSTM'
+    'name': 'UnidirecLSTM'
 }
 cfg = EasyDict(para)

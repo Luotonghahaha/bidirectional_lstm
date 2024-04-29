@@ -1,4 +1,5 @@
 import numpy as np
+
 from config_para import cfg
 
 """该文件获得train.txt val.txt test.txt"""
@@ -17,7 +18,9 @@ def make_idx_txt(Path, IdList, interval=2, T=20):
     for i in IdList:
         len_seq = int(T - interval * 2)
         for t in range(len_seq):
-            f.write('{},{},{},{},{},{}\n'.format(i, t, t + 1, t + 3, t + 4, t + 2))
+            f.write(
+                '{},{},{},{},{},{},{},{},{},{},{},{}\n'.format(i, t, t + 1, t + 2, t + 3, t + 4, t + 6, t + 7, t + 8,
+                                                               t + 9, t + 10, t + 5))
 
 
 if __name__ == '__main__':
@@ -32,11 +35,10 @@ if __name__ == '__main__':
     n_val = int(cfg.total_num * cfg.val_share)
     val_id_list = [i for i in range(n_val)]
     make_idx_txt(cfg.val_path, val_id_list, cfg.interval, cfg.T)
-    np.save(f'./data/mnist_val.npy', data[n_train:n_train+n_val, :, :, :])
+    np.save(f'./data/mnist_val.npy', data[n_train:n_train + n_val, :, :, :])
 
     # test_txt
     n_test = int(cfg.total_num * cfg.test_share)
     test_id_list = [i for i in range(n_test)]
     make_idx_txt(cfg.test_path, test_id_list, cfg.interval, cfg.T)
-    np.save(f'./data/mnist_test.npy', data[n_train+n_val:n_train + n_val + n_test, :, :, :])
-
+    np.save(f'./data/mnist_test.npy', data[n_train + n_val:n_train + n_val + n_test, :, :, :])
