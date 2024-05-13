@@ -210,7 +210,7 @@ def test_unidirec(epoch, record, result, test_dataloader, loss_num_per_epoch):
         result.write(f'best_ssim_epoch: {best_epoch}, psnr:{psnr_test_mean:.4f}, best_ssim:{best_ssim:.4f}\n')
         path_encoder = os.path.join(save_path, 'ckpt', f'best_ssim_encoder.pth')
         path_decoder = os.path.join(save_path, 'ckpt', f'best_ssim_decoder.pth')
-        path_lstm_forward = os.path.join(save_path, 'ckpt', f'last_lstm_forward.pth')
+        path_lstm_forward = os.path.join(save_path, 'ckpt', f'best_ssim_lstm_forward.pth')
 
         torch.save({'state_dict': encoder.state_dict()}, path_encoder)
         torch.save({'state_dict': convlstm_forward.state_dict()}, path_lstm_forward)
