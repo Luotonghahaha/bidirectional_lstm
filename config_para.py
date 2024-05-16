@@ -19,7 +19,7 @@ para = {
     'channel': 1,
     'height': 64,
     'weight': 64,
-    'epochs': 3,
+    'epochs': 300,
     'target_num': 1,
     'total_num': 10000,
     'train_share': 0.8,

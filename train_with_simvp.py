@@ -52,7 +52,7 @@ print('All data is ready!')
 
 
 # 训练单向RNN: 分别由前后各interval帧生成中间1帧,然后将两个结果加权组合
-def train_unidirec(epoch, record, result, train_dataloader, loss_num_per_epoch):
+def train_unidirec(epoch, record, result, train_dataloader):
     loss_train = []
     ssim_train = []
     psnr_train = []
@@ -91,7 +91,7 @@ def train_unidirec(epoch, record, result, train_dataloader, loss_num_per_epoch):
         f'Test on Epoch {epoch}/{cfg.epochs}, Loss: {loss_train_mean:.4f}, SSIM: {ssim_train_mean :.4f}, PSNR: {psnr_train_mean :.4f}')
 
 
-def test_unidirec(epoch, record, result, test_dataloader, loss_num_per_epoch):
+def test_unidirec(epoch, record, result, test_dataloader):
     global best_psnr, best_ssim, best_epoch
     loss_test = []
     ssim_test = []
@@ -160,7 +160,7 @@ def test_unidirec(epoch, record, result, test_dataloader, loss_num_per_epoch):
 
 
 # 训练双向RNN: 分别由前后各interval帧生成中间1帧,然后将两个结果加权组合
-def train_bidirec(epoch, record, result, train_dataloader, loss_num_per_epoch):
+def train_bidirec(epoch, record, result, train_dataloader):
     loss_train = []
     ssim_train = []
     psnr_train = []
@@ -207,7 +207,7 @@ def train_bidirec(epoch, record, result, train_dataloader, loss_num_per_epoch):
         f'Train on Epoch {epoch}/{cfg.epochs}, Loss: {loss_train:.4f}, SSIM: {ssim_mean_epoch :.4f}, PSNR: {psnr_mean_epoch :.4f}')
 
 
-def test_bidirec(epoch, record, result, test_dataloader, loss_num_per_epoch):
+def test_bidirec(epoch, record, result, test_dataloader):
     global best_psnr, best_ssim, best_epoch
     loss_test = []
     ssim_test = []
@@ -258,6 +258,7 @@ def test_bidirec(epoch, record, result, test_dataloader, loss_num_per_epoch):
 
             path_save_forward = os.path.join(save_path, 'ckpt', f'best_simvp_psnr_forward.pth')
             path_save_reverse = os.path.join(save_path, 'ckpt', f'best_simvp_psnr_reverse.pth')
+
             torch.save({'state_dict': simvp_model_forward.state_dict()}, path_save_forward)
             torch.save({'state_dict': simvp_model_reverse.state_dict()}, path_save_reverse)
         else:
@@ -287,7 +288,6 @@ if __name__ == '__main__':
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     criterion = nn.MSELoss().to(device)
     # 'interval': 2, 'target_num': 1, cfg.name = 'BidirecRNN'
-    loss_num_per_epoch = cfg.interval - 1 + cfg.target_num
     in_shape = [cfg.interval, cfg.channel, cfg.height, cfg.weight]
     seed = int(time.time())
     save_path = f'./Logs/{cfg.name}_{seed}'  # 保存模型
@@ -308,9 +308,9 @@ if __name__ == '__main__':
         with open(record_file, 'a') as result:
             for e in range(cfg.epochs):
                 result = open(record_file, 'a')
-                train_unidirec(e + 1, record, result, train_dataloader, loss_num_per_epoch)
+                train_unidirec(e + 1, record, result, train_dataloader)
                 # 在val数据上进行测试
-                test_unidirec(e + 1, record, result, val_dataloader, loss_num_per_epoch)
+                test_unidirec(e + 1, record, result, val_dataloader)
 
             # 保存最后一次模型
             path_save = os.path.join(save_path, 'ckpt', f'last_simvp.pth')
@@ -318,7 +318,7 @@ if __name__ == '__main__':
             print('Test on test dataset:')
             result.write('Test on test dataset:\n')
             # 在test数据中进行测试
-            test_unidirec(cfg.epochs, record, result, test_dataloader, loss_num_per_epoch)
+            test_unidirec(cfg.epochs, record, result, test_dataloader)
             print('Accomplished!')
             result.write('Accomplished!')
     elif cfg.name == 'BidirecLSTM':
@@ -334,9 +334,9 @@ if __name__ == '__main__':
             for e in range(cfg.epochs):
                 result = open(record_file, 'a')
 
-                train_bidirec(e + 1, record, result, train_dataloader, loss_num_per_epoch * 2)
+                train_bidirec(e + 1, record, result, train_dataloader)
                 # 在val数据上进行验证
-                test_bidirec(e + 1, record, result, val_dataloader, loss_num_per_epoch * 2)
+                test_bidirec(e + 1, record, result, val_dataloader)
 
             # 保存最后一次的模型
             path_save_forward = os.path.join(save_path, 'ckpt', f'last_simvp_forward.pth')
@@ -347,6 +347,6 @@ if __name__ == '__main__':
             # 在test数据上进行测试
             print('Test on test dataset:')
             result.write('Test on test dataset:\n')
-            test_bidirec(cfg.epochs, record, result, test_dataloader, loss_num_per_epoch * 2)
+            test_bidirec(cfg.epochs, record, result, test_dataloader)
             print('Accomplished!')
             result.write('Accomplished!')
