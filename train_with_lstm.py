@@ -4,7 +4,7 @@ import time
 
 import numpy as np
 import torch
-import torch.nn as nn # from skimage.metrics import peak_signal_noise_ratio as psnr
+import torch.nn as nn  # from skimage.metrics import peak_signal_noise_ratio as psnr
 # from skimage.metrics import structural_similarity as ssim
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader
@@ -24,16 +24,14 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # train_data_seq, train_target_inter, test_data_seq, test_target_inter = data_pro.make_data()
 # dataset_train = subDataset(train_data_seq, train_target_inter)
 # dataset_test = subDataset(test_data_seq, test_target_inter)
-dataset_train = subDataset(data_txt=cfg.train_path, data_npy=cfg.train_npy_path, isTrain=True)
-dataset_val = subDataset(data_txt=cfg.val_path, data_npy=cfg.val_npy_path, isTrain=False)
-dataset_test = subDataset(data_txt=cfg.test_path, data_npy=cfg.test_npy_path, isTrain=False)
-
+dataset_train = subDataset(root_path='./data_load', interval=cfg.interval, num_target=cfg.target_num, channel=cfg.channel, image_size=cfg.image_size,
+                           isTrain=True, use_augment=True)
+dataset_test = subDataset(root_path='./data_load', interval=cfg.interval, num_target=cfg.target_num, channel=cfg.channel, image_size=cfg.image_size,
+                           isTrain=False, use_augment=False)
 # dataset_train = subDataset(data_path='./data', split='train', interval=3)
 # dataset_test = subDataset(data_path='./data', split='test', interval=3)
 train_dataloader = DataLoader(dataset=dataset_train, batch_size=cfg.batch_size, shuffle=True,
                               num_workers=0, drop_last=True, prefetch_factor=2)
-val_dataloader = DataLoader(dataset=dataset_val, batch_size=cfg.batch_size, shuffle=False,
-                            num_workers=0, drop_last=True, prefetch_factor=2)
 test_dataloader = DataLoader(dataset=dataset_test, batch_size=cfg.batch_size, shuffle=False,
                              num_workers=0, drop_last=True, prefetch_factor=2)
 print('All data is ready!')
@@ -147,7 +145,6 @@ def test_unidirec(epoch, record, result, test_dataloader, loss_num_per_epoch):
                 loss += criterion(decoder_output1, x_test[:, ii + 1])
                 # print(loss_forward)
 
-
             # 对target逐帧预测，第一帧是target前的最后一帧
             lstm_for_input = x_test[:, cfg.interval - 1]  # 正向预测的第一帧由预测的前一帧输入得到
             for ti in range(cfg.target_num):
@@ -159,7 +156,6 @@ def test_unidirec(epoch, record, result, test_dataloader, loss_num_per_epoch):
                 loss += criterion(decoder_forward_pred, y_test[:, ti])
                 # print(loss_forward_pred)
                 lstm_for_input = decoder_forward_pred
-
 
         inter_pred = torch.stack(pred_list, dim=1)  # [B, T, C, H, W]
         ssim_test.append(ssim(inter_pred, y_test))
@@ -474,20 +470,8 @@ if __name__ == '__main__':
                 result = open(record_file, 'a')
                 train_unidirec(e + 1, record, result, train_dataloader, loss_num_per_epoch)
                 # 在val数据上进行测试
-                test_unidirec(e + 1, record, result, val_dataloader, loss_num_per_epoch)
+                test_unidirec(e + 1, record, result, test_dataloader, loss_num_per_epoch)
 
-            # 保存最后一次模型
-            path_encoder = os.path.join(save_path, 'ckpt', f'last_encoder.pth')
-            path_lstm_forward = os.path.join(save_path, 'ckpt', f'last_lstm_forward.pth')
-            path_decoder = os.path.join(save_path, 'ckpt', f'last_decoder.pth')
-
-            torch.save({'state_dict': encoder.state_dict()}, path_encoder)
-            torch.save({'state_dict': convlstm_forward.state_dict()}, path_lstm_forward)
-            torch.save({'state_dict': decoder.state_dict()}, path_decoder)
-            print('Test on test dataset:')
-            result.write('Test on test dataset:\n')
-            # 在test数据中进行测试
-            test_unidirec(cfg.epochs, record, result, test_dataloader, loss_num_per_epoch)
             print('Accomplished!')
             result.write('Accomplished!')
     elif cfg.name == 'BidirecLSTM':
@@ -513,21 +497,7 @@ if __name__ == '__main__':
 
                 train_bidirec(e + 1, record, result, train_dataloader, loss_num_per_epoch * 2)
                 # 在val数据上进行验证
-                test_bidirec(e + 1, record, result, val_dataloader, loss_num_per_epoch * 2)
+                test_bidirec(e + 1, record, result, test_dataloader, loss_num_per_epoch * 2)
 
-            # 保存最后一次的模型
-            path_encoder = os.path.join(save_path, 'ckpt', f'last_encoder.pth')
-            path_lstm_forward = os.path.join(save_path, 'ckpt', f'last_lstm_forward.pth')
-            path_lstm_reverse = os.path.join(save_path, 'ckpt', f'last_lstm_reverse.pth')
-            path_decoder = os.path.join(save_path, 'ckpt', f'last_decoder.pth')
-
-            torch.save({'state_dict': encoder.state_dict()}, path_encoder)
-            torch.save({'state_dict': convlstm_forward.state_dict()}, path_lstm_forward)
-            torch.save({'state_dict': convlstm_reverse.state_dict()}, path_lstm_reverse)
-            torch.save({'state_dict': decoder.state_dict()}, path_decoder)
-            # 在test数据上进行测试
-            print('Test on test dataset:')
-            result.write('Test on test dataset:\n')
-            test_bidirec(cfg.epochs, record, result, test_dataloader, loss_num_per_epoch * 2)
             print('Accomplished!')
             result.write('Accomplished!')

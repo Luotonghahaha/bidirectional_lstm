@@ -3,6 +3,7 @@
 from easydict import EasyDict
 para = {
     'data_path': './mnist_test_seq.npy',
+    'root_path': './data_load',
     'train_npy_path': './data/mnist_train.npy',
     'val_npy_path': './data/mnist_val.npy',
     'test_npy_path': './data/mnist_test.npy',
@@ -17,6 +18,7 @@ para = {
     'batch_size': 16,
     'interval': 5,
     'channel': 1,
+    'image_size': 64,
     'height': 64,
     'weight': 64,
     'epochs': 300,
@@ -30,6 +32,6 @@ para = {
     'learning_rate': 1e-3,
     'hidden_rnn': 512,
     'epsilon': 0.5,
-    'name': 'UnidirecLSTM',
+    'name': 'BidirecLSTM',
 }
 cfg = EasyDict(para)

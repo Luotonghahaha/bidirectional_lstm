@@ -1,11 +1,14 @@
+import gzip
+import os
 import random
-from config_para import cfg
+
 import numpy as np
 import torch
-from PIL import Image
+import torch.nn.functional as F
 from torch.utils.data import Dataset
-from torchvision import transforms as T
 
+from config_para import cfg
+from matplotlib import pyplot as plt
 
 def set_seed(seed=1):
     random.seed(seed)
@@ -14,179 +17,189 @@ def set_seed(seed=1):
     torch.cuda.manual_seed(seed)
 
 
-def _pil_loader(path, cropArea=None, resizeDim=None, frameFlip=0):
-    # open path as file to avoid ResourceWarning (https://github.com/python-pillow/Pillow/issues/835)
-    with open(path, 'rb') as f:
-        img = Image.open(f)
-        # Resize image if specified.
-        resized_img = img.resize(resizeDim, Image.ANTIALIAS) if (resizeDim != None) else img
-        # Crop image if crop area specified.
-        cropped_img = resized_img.crop(cropArea) if (cropArea != None) else resized_img
-        # Flip image horizontally if specified.
-        flipped_img = cropped_img.transpose(Image.FLIP_LEFT_RIGHT) if frameFlip else cropped_img
-        return flipped_img.convert('RGB')
+def load_mnist(root, data_name='mnist'):  # return (60000, 28, 28) MNIST dataset
+    # Load MNIST dataset for generating training data.
+    file_map = {
+        'mnist': 'moving_mnist/train-images-idx3-ubyte.gz',
+        'fmnist': 'moving_fmnist/train-images-idx3-ubyte.gz',
+        'mnist_cifar': 'moving_mnist/train-images-idx3-ubyte.gz',
+    }
+    path = os.path.join(root, file_map[data_name])
+    with gzip.open(path, 'rb') as f:
+        mnist = np.frombuffer(f.read(), np.uint8, offset=16)
+        mnist = mnist.reshape(-1, 28, 28)
+    return mnist
+
+
+def load_fixed_set(root, data_name='mnist'):  # return (20, 10000, 64, 64, 1) moving MNIST dataset
+    # Load the fixed dataset
+    file_map = {
+        'mnist': 'moving_mnist/mnist_test_seq.npy',
+        'fmnist': 'moving_fmnist/fmnist_test_seq.npy',
+        'mnist_cifar': 'moving_mnist/mnist_cifar_test_seq.npy',
+    }
+    path = os.path.join(root, file_map[data_name])
+    dataset = np.load(path)
+    if 'cifar' not in data_name:
+        dataset = dataset[..., np.newaxis]
+    return dataset
 
 
 # dataset for interpolating
 class subDataset(Dataset):
-    def __init__(self, data_txt, data_npy, isTrain):
+    def __init__(self, root_path, interval, num_target, channel, image_size, isTrain, use_augment):
         super(subDataset, self).__init__()
+        self.root_path = root_path
+        self.interval = interval
+        self.num_target = num_target
+        self.seq_len = interval * 2 + num_target
         self.isTrain = isTrain
-        self.data_npy = np.load(data_npy)
-        self.data = []
-
-        # 获取所有数据集
-        datatemp = open(data_txt, 'r').readlines()
-        for line in datatemp:
-            self.data.append([int(i) for i in line.strip().split(',')])
-            # print([int(i) for i in line.strip().split(',')])
-            # print(self.data)
-
-        # # 用500个样本做测试
-        # datatemp = open(data_txt, 'r')
-        # for i in range(500):
-        #     self.data.append([int(i) for i in datatemp.readline().strip().split(',')])
-
-        self.transform_rotation_180 = T.Compose([
-            T.ToPILImage(),
-            T.RandomApply([T.RandomResizedCrop(size=(64, 64))], p=0.3),
-            T.RandomHorizontalFlip(p=1),
-            T.RandomVerticalFlip(p=1),
-            T.ToTensor(),
-        ])
-        self.transform_horizontal_flip = T.Compose([
-            T.ToPILImage(),
-            T.RandomApply([T.RandomResizedCrop(size=(64, 64))], p=0.3),
-            T.RandomHorizontalFlip(p=1),
-            T.ToTensor(),
-        ])
-        self.transform_vertical_flip = T.Compose([
-            T.ToPILImage(),
-            T.RandomApply([T.RandomResizedCrop(size=(64, 64))], p=0.3),
-            T.RandomVerticalFlip(p=1),
-            T.ToTensor(),
-        ])
-        self.transform_test = T.Compose([
-            T.ToPILImage(),
-            T.ToTensor(),
-        ])
+        if self.isTrain:
+            self.data = load_mnist(self.root_path)
+        else:
+            self.data = load_fixed_set(self.root_path)
+        self.image_size = image_size
+        self.image_size_ = 28
+        self.step_size = 0.1
+        self.use_augment = use_augment
+        self.num_objects = 2
+        self.channel = channel
 
     def __len__(self):
         return len(self.data)
 
     def __getitem__(self, idx):
-        # print(idx)
-        txtline = self.data[idx]
-        video = self.data_npy[txtline[0], txtline[1:], :, :]  # 前边interval * 2列是data,后面的列是target
-        seq_len = video.shape[0]
-        data_temp = torch.zeros(video.shape)  # [interval * 2 + cfg.target_num , H, W]
-
+        seq_length = self.interval + self.num_target
         if self.isTrain:
-            if random.randint(-2, 1):
-                for i in range(seq_len):
-                    data_temp[i] = self.transform_rotation_180(video[i])    # rotation 180
-            elif random.randint(-2, 1):
-                for i in range(seq_len):
-                    data_temp[i] = self.transform_horizontal_flip(video[i])    # horizontal flip
-            elif random.randint(-2, 1):
-                for i in range(seq_len):
-                    data_temp[i] = self.transform_vertical_flip(video[i])  # vertical flip
-
+            # Generate data on the fly
+            images = self.generate_moving_mnist(self.num_objects)
         else:
-            for i in range(seq_len):
-                data_temp[i] = self.transform_test(video[i])
-            # data_temp[-1] = self.test_target_transform(np.expand_dims(video[-1], axis=-1))
+            images = self.data[:, idx, ...]
 
-        data = data_temp[:cfg.interval*2, :, :].unsqueeze(1)
-        target = data_temp[cfg.interval*2:, :, :].unsqueeze(1)
+        if self.channel == 1:
+            images = images[:self.seq_len].reshape(
+                (self.seq_len, self.image_size, self.channel, self.image_size, self.channel)).transpose(
+                0, 2, 4, 1, 3).reshape((self.seq_len, self.channel, self.image_size, self.image_size))
+        else:
+            images = images[:self.seq_len].reshape(
+                (self.seq_len, self.image_size, self.channel, self.image_size, self.channel)).transpose(
+                0, 2, 4, 1, 3).reshape((self.seq_len, self.channel * self.channel, self.image_size, self.image_size))
+        # # 创建 1 行 11 列的子图
+        # fig, axes = plt.subplots(1, 11, figsize=(22, 4))
+        #
+        # # 遍历子图并绘制数据
+        # for i, ax in enumerate(axes):
+        #     ax.imshow(images[i].squeeze(0), cmap='gray')
+        #     ax.set_title(f'{i + 1}')
+        #
+        # # 调整间距并显示图形
+        # plt.subplots_adjust(wspace=0.4)
+        # plt.show()
+        # exit()
+        pre_input = images[:self.interval]
+        aft_input = images[self.interval + self.num_target:]
+        if self.num_target > 0:
+            output = images[self.interval: self.interval + self.num_target]
+        else:
+            output = []
 
-        return data, target
+        output = torch.from_numpy(output / 255.0).contiguous().float()
+        pre_input = torch.from_numpy(pre_input / 255.0).contiguous().float()
+        aft_input = torch.from_numpy(aft_input / 255.0).contiguous().float()
+        input = torch.cat([pre_input, aft_input], dim=0)
+        if self.use_augment:
+            imgs = self._augment_seq(torch.cat([input, output], dim=0), crop_scale=0.94)
+            input = imgs[:self.interval * 2, ...]
+            output = imgs[self.interval * 2:, ...]
 
-
-# demo dataset for generating video series
-class subDataset_demo(Dataset):
-    def __init__(self, sample_index, data_txt_path, data_npy_path, isTrain):
-        super(subDataset_demo, self).__init__()
-        self.sample_index = sample_index
-        self.data_npy_path = data_npy_path
-        self.isTrain = isTrain
-        self.data_npy = np.load(self.data_npy_path)
-        self.data_demo = []
-
-        # 只返回一条视频序列的6个样本
-        datatemp = open(data_txt_path, 'r')
-        for line in datatemp:
-            line_ = [int(i) for i in line.strip().split(',')]
-            if line_[0] == sample_index:
-                self.data_demo.append(line_)
-        # print(self.data_demo)
-        # self.data.append([int(i) for i in datatemp.readline().strip().split(',')])
-
-        # self.flip_transform = T.Compose([
-        #     # T.ToPILImage(),
-        #     T.RandomHorizontalFlip(p=1),  # 水平翻转
-        #     T.RandomVerticalFlip(p=1)  # 垂直翻转
-        # ])
-        self.transform = T.Compose([
-            T.ToPILImage(),
-            T.ToTensor(),
-            # T.Normalize((0.1307,), (0.3081,))
-        ])
-
-    def __len__(self):
-        return len(self.data_demo)
-
-    def __getitem__(self, idx):
+        return input, output
         # print(idx)
-        txtline = self.data_demo[idx]
-        if random.random() < 0.5:
-            id_ = txtline[0]
-            scaleing = random.random() + 1
-            if round(max(txtline[1:]) * scaleing) <= 19:
-                txtline = [round(i * scaleing) for i in txtline[1:]]
-                txtline = [id_] + txtline
-        video = self.data_npy[txtline[0], txtline[1:], :, :]  # 中间interval * 2列是data,最后一列是target
 
-        data_temp = torch.zeros(video.shape)
-        for i in range(video.shape[0]):
-            data_temp[i] = self.transform(video[i])
+    def get_random_trajectory(self, seq_length):
+        ''' Generate a random sequence of a MNIST digit '''
+        canvas_size = self.image_size - self.image_size_
+        x = random.random()
+        y = random.random()
+        theta = random.random() * 2 * np.pi
 
-        data = data_temp[:-1, :, :]
-        target = data_temp[-1, :, :].unsqueeze(0)
+        v_ys = [np.sin(theta)] * seq_length
+        v_xs = [np.cos(theta)] * seq_length
 
+        start_y = np.zeros(seq_length)
+        start_x = np.zeros(seq_length)
+        bounce_x = 1
+        bounce_y = 1
+        for i, v_x, v_y in zip(range(seq_length), v_xs, v_ys):
+            # Take a step along velocity.
+            y += bounce_y * v_y * self.step_size
+            x += bounce_x * v_x * self.step_size
 
-        return data, target
+            # Bounce off edges.
+            if x <= 0:
+                x = 0
+                # v_x = -v_x
+                bounce_x = -bounce_x
+            if x >= 1.0:
+                x = 1.0
+                # v_x = -v_x
+                bounce_x = -bounce_x
+            if y <= 0:
+                y = 0
+                # v_y = -v_y
+                bounce_y = -bounce_y
+            if y >= 1.0:
+                y = 1.0
+                # v_y = -v_y
+                bounce_y = -bounce_y
+            start_y[i] = y
+            start_x[i] = x
 
+        # Scale to the size of the canvas.
+        start_y = (canvas_size * start_y).astype(np.int32)
+        start_x = (canvas_size * start_x).astype(np.int32)
+        return start_y, start_x
 
-# encoder_decoder dataset
-class subDataset_i(Dataset):
-    def __init__(self, data_npy, isTrain):
-        super(subDataset_i, self).__init__()
-        self.data_npy = np.load(data_npy)
-        self.H = self.data_npy.shape[2]
-        self.W = self.data_npy.shape[3]
-        self.data = self.data_npy.reshape(-1, self.H, self.W)
-        self.isTrain = isTrain
-        self.train_transform = T.Compose([
-            T.ToPILImage(),
-            T.ToTensor(),
-            # T.Normalize((0.1307,), (0.3081,))
-        ])
-        self.test_transform = T.Compose([
-            T.ToPILImage(),
-            T.ToTensor(),
-            # T.Normalize((0.1307,), (0.3081,))
-        ])
+    def generate_moving_mnist(self, num_objects):
+        '''
+        Get random trajectories for the digits and generate a video.
+        '''
+        samples = np.zeros((self.seq_len, self.image_size,
+                            self.image_size), dtype=np.float32)
+        # Trajectory
+        for n in range(num_objects):
+            # Trajectory
+            start_y, start_x = self.get_random_trajectory(self.seq_len)
+            ind = random.randint(0, self.data.shape[0] - 1)
+            digit_image = self.data[ind].copy()
 
-    def __len__(self):
-        return len(self.data)
+            for i in range(self.seq_len):
+                top = start_y[i]
+                left = start_x[i]
+                bottom = top + self.image_size_
+                right = left + self.image_size_
+                # Draw digit
+                samples[i, top:bottom, left:right] = np.maximum(samples[i, top:bottom, left:right], digit_image)
 
-    def __getitem__(self, idx):
-        if self.isTrain:
-            sample = self.train_transform(self.data[idx])
-        else:
-            sample = self.test_transform(self.data[idx])
-        return sample
+            moving_sample = samples[..., np.newaxis]
+        return moving_sample
+
+    def _augment_seq(self, imgs, crop_scale=0.94):
+        """Augmentations for video"""
+        _, _, h, w = imgs.shape  # original shape, e.g., [10, 1, 64, 64]
+        imgs = F.interpolate(imgs, scale_factor=1 / crop_scale, mode='bilinear')
+        _, _, ih, iw = imgs.shape
+        # Random Crop
+        x = np.random.randint(0, ih - h + 1)
+        y = np.random.randint(0, iw - w + 1)
+        imgs = imgs[:, :, x:x + h, y:y + w]
+        # Random Flip
+        if random.randint(-2, 1):
+            imgs = torch.flip(imgs, dims=(2, 3))  # rotation 180
+        elif random.randint(-2, 1):
+            imgs = torch.flip(imgs, dims=(2,))  # vertical flip
+        elif random.randint(-2, 1):
+            imgs = torch.flip(imgs, dims=(3,))  # horizontal flip
+        return imgs
 
 
 if __name__ == '__main__':
@@ -194,8 +207,8 @@ if __name__ == '__main__':
     # len = subdataset.__len__()
     # it = subdataset.__getitem__(10)
 
-    subdataset = subDataset(data_txt='data/train_5.txt', data_npy='data/mnist_train.npy',
-                            isTrain=True)
+    subdataset = subDataset(root_path='./data_load', interval=5, num_target=1, channel=1, image_size=cfg.image_size,
+                            isTrain=True, use_augment=False)
     it = subdataset.__getitem__(0)
 
     # subdataset = subDataset_demo(12, data_txt_path='data/test_2.txt', data_npy_path='data/mnist_test.npy',
