@@ -1,3 +1,4 @@
 data/*.npy
 data_load/*.npy
-data_load/mnist/*npy
+data_load/moving_mnist/*.npy
+data_load/moving_mnist/*.gz

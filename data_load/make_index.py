@@ -6,7 +6,7 @@ from config_para import cfg
 
 
 def data_loader(path):
-    # load moving mnist data, data shape = [time steps, batch size, width, height] = [20, batch_size, 64, 64]
+    # load moving moving_mnist data, data shape = [time steps, batch size, width, height] = [20, batch_size, 64, 64]
     # B S H W -> S B H W
     data = np.load(path)
     data_trans = data.transpose(1, 0, 2, 3)
