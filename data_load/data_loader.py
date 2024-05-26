@@ -8,7 +8,7 @@ import torch.nn.functional as F
 from torch.utils.data import Dataset
 
 from config_para import cfg
-from matplotlib import pyplot as plt
+
 
 def set_seed(seed=1):
     random.seed(seed)
@@ -47,12 +47,12 @@ def load_fixed_set(root, data_name='mnist'):  # return (20, 10000, 64, 64, 1) mo
 
 # dataset for interpolating
 class subDataset(Dataset):
-    def __init__(self, root_path, interval, num_target, channel, image_size, isTrain, use_augment):
+    def __init__(self, root_path, interval, target_num, channel, image_size, isTrain, use_augment):
         super(subDataset, self).__init__()
         self.root_path = root_path
         self.interval = interval
-        self.num_target = num_target
-        self.seq_len = interval * 2 + num_target
+        self.target_num = target_num
+        self.seq_len = interval * 2 + target_num
         self.isTrain = isTrain
         if self.isTrain:
             self.data = load_mnist(self.root_path)
@@ -69,7 +69,7 @@ class subDataset(Dataset):
         return len(self.data)
 
     def __getitem__(self, idx):
-        seq_length = self.interval + self.num_target
+        seq_length = self.interval + self.target_num
         if self.isTrain:
             # Generate data on the fly
             images = self.generate_moving_mnist(self.num_objects)
@@ -84,6 +84,8 @@ class subDataset(Dataset):
             images = images[:self.seq_len].reshape(
                 (self.seq_len, self.image_size, self.channel, self.image_size, self.channel)).transpose(
                 0, 2, 4, 1, 3).reshape((self.seq_len, self.channel * self.channel, self.image_size, self.image_size))
+        unique_values = np.unique(images)
+
         # # 创建 1 行 11 列的子图
         # fig, axes = plt.subplots(1, 11, figsize=(22, 4))
         #
@@ -97,9 +99,9 @@ class subDataset(Dataset):
         # plt.show()
         # exit()
         pre_input = images[:self.interval]
-        aft_input = images[self.interval + self.num_target:]
-        if self.num_target > 0:
-            output = images[self.interval: self.interval + self.num_target]
+        aft_input = images[self.interval + self.target_num:]
+        if self.target_num > 0:
+            output = images[self.interval: self.interval + self.target_num]
         else:
             output = []
 
@@ -107,6 +109,9 @@ class subDataset(Dataset):
         pre_input = torch.from_numpy(pre_input / 255.0).contiguous().float()
         aft_input = torch.from_numpy(aft_input / 255.0).contiguous().float()
         input = torch.cat([pre_input, aft_input], dim=0)
+        unique_values_out = np.unique(output)
+        unique_values_in = np.unique(input)
+
         if self.use_augment:
             imgs = self._augment_seq(torch.cat([input, output], dim=0), crop_scale=0.94)
             input = imgs[:self.interval * 2, ...]
@@ -207,7 +212,7 @@ if __name__ == '__main__':
     # len = subdataset.__len__()
     # it = subdataset.__getitem__(10)
 
-    subdataset = subDataset(root_path='./data_load', interval=5, num_target=1, channel=1, image_size=cfg.image_size,
+    subdataset = subDataset(root_path='./data_load', interval=5, target_num=1, channel=1, image_size=cfg.image_size,
                             isTrain=True, use_augment=False)
     it = subdataset.__getitem__(0)
 

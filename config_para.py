@@ -21,7 +21,7 @@ para = {
     'image_size': 64,
     'height': 64,
     'weight': 64,
-    'epochs': 300,
+    'epochs': 200,
     'target_num': 1,
     'total_num': 10000,
     'train_share': 0.8,
@@ -32,6 +32,6 @@ para = {
     'learning_rate': 1e-3,
     'hidden_rnn': 512,
     'epsilon': 0.5,
-    'name': 'BidirecLSTM',
+    'name': 'UnidirecLSTM',
 }
 cfg = EasyDict(para)
