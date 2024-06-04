@@ -1,13 +1,13 @@
 # from data_load.data_pro_2 import *
 import torch
-from models.encoder_model import Encoder, Decoder, ODEfunc
+from .models.encoder_model import Encoder, Decoder, ODEfunc
 from torch.utils.data import DataLoader
 from evaluation.ssim import ssim
 from evaluation.psnr import psnr
 from evaluation.ie import ie
 from tqdm import tqdm
 from torch.utils.tensorboard import SummaryWriter
-from data_load.data_loader import subDataset_i
+from .data_load.data_loader import subDataset_i
 from config_para import cfg
 import os
 import time

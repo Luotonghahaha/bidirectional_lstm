@@ -6,8 +6,9 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 from torch.utils.data import Dataset
+from matplotlib import pyplot as plt
+from bidirectional_lstm.config_para import cfg
 
-from config_para import cfg
 
 
 def set_seed(seed=1):
@@ -60,7 +61,7 @@ class subDataset(Dataset):
             self.data = load_fixed_set(self.root_path)
         self.image_size = image_size
         self.image_size_ = 28
-        self.step_size = 0.1
+        self.step_size = 0.2
         self.use_augment = use_augment
         self.num_objects = 2
         self.channel = channel
@@ -73,6 +74,7 @@ class subDataset(Dataset):
         if self.isTrain:
             # Generate data on the fly
             images = self.generate_moving_mnist(self.num_objects)
+
         else:
             images = self.data[:, idx, ...]
 
@@ -86,18 +88,18 @@ class subDataset(Dataset):
                 0, 2, 4, 1, 3).reshape((self.seq_len, self.channel * self.channel, self.image_size, self.image_size))
         unique_values = np.unique(images)
 
-        # # 创建 1 行 11 列的子图
-        # fig, axes = plt.subplots(1, 11, figsize=(22, 4))
-        #
-        # # 遍历子图并绘制数据
-        # for i, ax in enumerate(axes):
-        #     ax.imshow(images[i].squeeze(0), cmap='gray')
-        #     ax.set_title(f'{i + 1}')
-        #
-        # # 调整间距并显示图形
-        # plt.subplots_adjust(wspace=0.4)
-        # plt.show()
-        # exit()
+        # 创建 1 行 11 列的子图
+        fig, axes = plt.subplots(1, 11, figsize=(22, 4))
+
+        # 遍历子图并绘制数据
+        for i, ax in enumerate(axes):
+            ax.imshow(images[i].squeeze(0), cmap='gray')
+            ax.set_title(f'{i + 1}')
+
+        # 调整间距并显示图形
+        plt.subplots_adjust(wspace=0.4)
+        plt.show()
+        exit()
         pre_input = images[:self.interval]
         aft_input = images[self.interval + self.target_num:]
         if self.target_num > 0:
@@ -185,7 +187,7 @@ class subDataset(Dataset):
                 # Draw digit
                 samples[i, top:bottom, left:right] = np.maximum(samples[i, top:bottom, left:right], digit_image)
 
-            moving_sample = samples[..., np.newaxis]
+        moving_sample = samples[..., np.newaxis]
         return moving_sample
 
     def _augment_seq(self, imgs, crop_scale=0.94):
@@ -215,6 +217,10 @@ if __name__ == '__main__':
     subdataset = subDataset(root_path='./data_load', interval=5, target_num=1, channel=1, image_size=cfg.image_size,
                             isTrain=True, use_augment=False)
     it = subdataset.__getitem__(0)
+
+    # dataset_test = subDataset(root_path='./data_load', interval=cfg.interval, target_num=cfg.target_num,
+    #                           channel=cfg.channel, image_size=cfg.image_size,
+    #                           isTrain=True, use_augment=False)
 
     # subdataset = subDataset_demo(12, data_txt_path='data/test_2.txt', data_npy_path='data/mnist_test.npy',
     #                              isTrain=False)

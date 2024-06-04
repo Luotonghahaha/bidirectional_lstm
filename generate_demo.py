@@ -98,6 +98,6 @@ plt.tight_layout()
 save_folder = './out'
 os.makedirs(save_folder, exist_ok=True)
 
-save_path = os.path.join(save_folder, 'ground_truth_vs_predictionq_1.png')
+save_path = os.path.join(save_folder, 'ground_truth_vs_predictionq_2.png')
 plt.savefig(save_path)
 

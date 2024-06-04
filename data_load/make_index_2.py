@@ -1,5 +1,5 @@
 import numpy as np
-from config_para import cfg
+from bidirectional_lstm.config_para import cfg
 
 """该文件获得train_2.txt val_2.txt test_2.txt"""
 

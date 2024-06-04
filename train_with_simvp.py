@@ -5,7 +5,7 @@ import numpy as np
 import torch
 import torch.nn as nn  # from skimage.metrics import peak_signal_noise_ratio as psnr
 # from skimage.metrics import structural_similarity as ssim
-from torch.optim.lr_scheduler import ReduceLROnPlateau
+from torch.optim.lr_scheduler import ReduceLROnPlateau, OneCycleLR
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
@@ -28,7 +28,7 @@ dataset_train = subDataset(root_path='./data_load', interval=cfg.interval, targe
                            isTrain=True, use_augment=True)
 dataset_test = subDataset(root_path='./data_load', interval=cfg.interval, target_num=cfg.target_num,
                           channel=cfg.channel, image_size=cfg.image_size,
-                          isTrain=True, use_augment=False)
+                          isTrain=False, use_augment=False)
 
 # dataset_train = subDataset(data_path='./data', split='train', interval=3)
 # dataset_test = subDataset(data_path='./data', split='test', interval=3)
@@ -303,7 +303,7 @@ if __name__ == '__main__':
     if cfg.name == 'UnidirecLSTM':  # unidirection
         simvp_model = SimVP_Model(in_shape).to(device)
         optimizer_uni = torch.optim.Adam(simvp_model.parameters(), lr=cfg.learning_rate, weight_decay=cfg.weight_decay)
-        scheduler_uni = ReduceLROnPlateau(optimizer_uni, mode='min', patience=2, factor=0.1, verbose=True)
+        scheduler_uni = OneCycleLR(optimizer_uni, mode='min', patience=2, factor=0.1, verbose=True)
         print('training with UnidirectLSTM!')
         with open(record_file, 'a') as result:
             for e in range(cfg.epochs):

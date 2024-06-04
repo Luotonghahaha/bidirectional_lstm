@@ -1,6 +1,6 @@
 import torch
 import numpy as np
-from models.models import Encoder, Decoder, RNNModel
+from .models import Encoder, Decoder, RNNModel
 from torch.utils.data import DataLoader
 from evaluation.ssim import ssim
 from evaluation.psnr import psnr
