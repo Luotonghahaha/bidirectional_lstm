@@ -33,9 +33,9 @@ dataset_test = subDataset(root_path='./data_load', interval=cfg.interval, target
 # dataset_train = subDataset(data_path='./data', split='train', interval=3)
 # dataset_test = subDataset(data_path='./data', split='test', interval=3)
 train_dataloader = DataLoader(dataset=dataset_train, batch_size=cfg.batch_size, shuffle=True,
-                              num_workers=0, drop_last=True, prefetch_factor=2)
+                              num_workers=4, drop_last=True, prefetch_factor=2)
 test_dataloader = DataLoader(dataset=dataset_test, batch_size=cfg.batch_size, shuffle=False,
-                             num_workers=0, drop_last=True, prefetch_factor=2)
+                             num_workers=4, drop_last=True, prefetch_factor=2)
 print('All data is ready!')
 
 
