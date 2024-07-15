@@ -12,7 +12,7 @@ from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
 from config_para import cfg
-from data_load.data_loader import subDataset
+from data_load.data_loader_2 import subDataset
 from evaluation.psnr import psnr
 from evaluation.ssim import ssim
 # from models.models import Encoder, Decoder, RNNModel

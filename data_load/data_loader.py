@@ -10,7 +10,6 @@ from matplotlib import pyplot as plt
 from bidirectional_lstm.config_para import cfg
 
 
-
 def set_seed(seed=1):
     random.seed(seed)
     np.random.seed(seed)
@@ -53,7 +52,10 @@ class subDataset(Dataset):
         self.root_path = root_path
         self.interval = interval
         self.target_num = target_num
-        self.seq_len = interval * 2 + target_num
+        self.seq_len_before = (interval * 2 - 1) * (target_num + 1) + 1
+        self.seq_len = interval * 2 + 1
+        self.start_index = (interval - 1) * (target_num + 1) + 1
+        self.end_index = self.start_index + target_num
         self.isTrain = isTrain
         if self.isTrain:
             self.data = load_mnist(self.root_path)
@@ -67,16 +69,37 @@ class subDataset(Dataset):
         self.channel = channel
 
     def __len__(self):
-        return len(self.data)
+        if self.isTrain:
+            return len(self.data)
+        else:
+            return self.data.shape[1]
 
     def __getitem__(self, idx):
-        seq_length = self.interval + self.target_num
         if self.isTrain:
             # Generate data on the fly
-            images = self.generate_moving_mnist(self.num_objects)
+            moving_sample = self.generate_moving_mnist(self.num_objects)
+            # Generate the training sequence: training data and corresponding labels
+            images_interval = moving_sample[::self.target_num + 1]
+            images_target = moving_sample[self.start_index:self.end_index]
+            images = np.concatenate([images_interval, images_target], axis=0)
 
         else:
-            images = self.data[:, idx, ...]
+            moving_sample = self.data[:self.seq_len_before, idx, ...]
+            # # 创建 1 行 11 列的子图
+            # fig, axes = plt.subplots(1, 11, figsize=(18, 4))
+            #
+            # # 遍历子图并绘制数据
+            # for i, ax in enumerate(axes):
+            #     ax.imshow(moving_sample[i], cmap='gray')
+            #     ax.set_title(f'{i + 1}')
+            #
+            # # 调整间距并显示图形
+            # plt.subplots_adjust(wspace=0.4)
+            # plt.show()
+            # exit()
+            images_interval = moving_sample[::self.target_num + 1]
+            images_target = moving_sample[self.start_index:self.end_index]
+            images = np.concatenate([images_interval, images_target], axis=0)
 
         if self.channel == 1:
             images = images[:self.seq_len].reshape(
@@ -86,38 +109,22 @@ class subDataset(Dataset):
             images = images[:self.seq_len].reshape(
                 (self.seq_len, self.image_size, self.channel, self.image_size, self.channel)).transpose(
                 0, 2, 4, 1, 3).reshape((self.seq_len, self.channel * self.channel, self.image_size, self.image_size))
-        unique_values = np.unique(images)
+        images = torch.from_numpy(images / 255.0).contiguous().float()
 
-        # 创建 1 行 11 列的子图
-        fig, axes = plt.subplots(1, 11, figsize=(22, 4))
+        # unique_values = np.unique(images)
 
-        # 遍历子图并绘制数据
-        for i, ax in enumerate(axes):
-            ax.imshow(images[i].squeeze(0), cmap='gray')
-            ax.set_title(f'{i + 1}')
 
-        # 调整间距并显示图形
-        plt.subplots_adjust(wspace=0.4)
-        plt.show()
-        exit()
-        pre_input = images[:self.interval]
-        aft_input = images[self.interval + self.target_num:]
+
+        input = images[: self.interval * 2]
         if self.target_num > 0:
-            output = images[self.interval: self.interval + self.target_num]
+            output = images[-self.target_num:]
         else:
             output = []
-
-        output = torch.from_numpy(output / 255.0).contiguous().float()
-        pre_input = torch.from_numpy(pre_input / 255.0).contiguous().float()
-        aft_input = torch.from_numpy(aft_input / 255.0).contiguous().float()
-        input = torch.cat([pre_input, aft_input], dim=0)
-        unique_values_out = np.unique(output)
-        unique_values_in = np.unique(input)
 
         if self.use_augment:
             imgs = self._augment_seq(torch.cat([input, output], dim=0), crop_scale=0.94)
             input = imgs[:self.interval * 2, ...]
-            output = imgs[self.interval * 2:, ...]
+            output = imgs[-self.target_num:, ...]
 
         return input, output
         # print(idx)
@@ -170,16 +177,16 @@ class subDataset(Dataset):
         '''
         Get random trajectories for the digits and generate a video.
         '''
-        samples = np.zeros((self.seq_len, self.image_size,
+        samples = np.zeros((self.seq_len_before, self.image_size,
                             self.image_size), dtype=np.float32)
         # Trajectory
         for n in range(num_objects):
             # Trajectory
-            start_y, start_x = self.get_random_trajectory(self.seq_len)
+            start_y, start_x = self.get_random_trajectory(self.seq_len_before)
             ind = random.randint(0, self.data.shape[0] - 1)
             digit_image = self.data[ind].copy()
 
-            for i in range(self.seq_len):
+            for i in range(self.seq_len_before):
                 top = start_y[i]
                 left = start_x[i]
                 bottom = top + self.image_size_
@@ -210,18 +217,9 @@ class subDataset(Dataset):
 
 
 if __name__ == '__main__':
-    # subdataset = subDataset_i(data_npy='data/mnist_train.npy', isTrain=True)
-    # len = subdataset.__len__()
-    # it = subdataset.__getitem__(10)
-
-    subdataset = subDataset(root_path='./data_load', interval=5, target_num=1, channel=1, image_size=cfg.image_size,
-                            isTrain=True, use_augment=False)
-    it = subdataset.__getitem__(0)
-
-    # dataset_test = subDataset(root_path='./data_load', interval=cfg.interval, target_num=cfg.target_num,
-    #                           channel=cfg.channel, image_size=cfg.image_size,
-    #                           isTrain=True, use_augment=False)
-
-    # subdataset = subDataset_demo(12, data_txt_path='data/test_2.txt', data_npy_path='data/mnist_test.npy',
-    #                              isTrain=False)
-    # it = subdataset.__getitem__(111)
+    subdataset = subDataset(root_path='./datasets', interval=3, target_num=1, channel=1,
+                            image_size=cfg.image_size,
+                            isTrain=False, use_augment=False)
+    index = random.randint(0, 9999)
+    print(index)
+    it = subdataset.__getitem__(index)

@@ -2,7 +2,7 @@ import numpy as np
 
 from bidirectional_lstm.config_para import cfg
 
-"""该文件获得train.txt val.txt test.txt"""
+"""该文件获得train_5.txt val_5.txt test_5.txt"""
 
 
 def data_loader(path):
@@ -24,21 +24,23 @@ def make_idx_txt(Path, IdList, interval=2, T=20):
 
 
 if __name__ == '__main__':
-    data = data_loader('./data_load/mnist_test_seq.npy')
-    # train_txt
-    n_train = int(cfg.total_num * cfg.train_share)
-    train_id_list = [i for i in range(n_train)]
-    make_idx_txt(cfg.train_path, train_id_list, cfg.interval, cfg.T)
-    np.save(f'./data/mnist_train.npy', data[:n_train, :, :, :])
-
-    # val_txt
-    n_val = int(cfg.total_num * cfg.val_share)
-    val_id_list = [i for i in range(n_val)]
-    make_idx_txt(cfg.val_path, val_id_list, cfg.interval, cfg.T)
-    np.save(f'./data/mnist_val.npy', data[n_train:n_train + n_val, :, :, :])
-
-    # test_txt
-    n_test = int(cfg.total_num * cfg.test_share)
-    test_id_list = [i for i in range(n_test)]
-    make_idx_txt(cfg.test_path, test_id_list, cfg.interval, cfg.T)
-    np.save(f'./data/mnist_test.npy', data[n_train + n_val:n_train + n_val + n_test, :, :, :])
+    data = data_loader('./datasets/moving_mnist/mnist_test_seq.npy')
+    index = 0
+    make_idx_txt('./bidirectional_lstm/data/demo.txt', [index], cfg.interval, cfg.T)
+    # # train_txt
+    # n_train = int(cfg.total_num * cfg.train_share)
+    # train_id_list = [i for i in range(n_train)]
+    # make_idx_txt(cfg.train_path, train_id_list, cfg.interval, cfg.T)
+    # np.save(f'./datasets/mnist_train.npy', data[:n_train, :, :, :])
+    #
+    # # val_txt
+    # n_val = int(cfg.total_num * cfg.val_share)
+    # val_id_list = [i for i in range(n_val)]
+    # make_idx_txt(cfg.val_path, val_id_list, cfg.interval, cfg.T)
+    # np.save(f'./datasets/mnist_val.npy', data[n_train:n_train + n_val, :, :, :])
+    #
+    # # test_txt
+    # n_test = int(cfg.total_num * cfg.test_share)
+    # test_id_list = [i for i in range(n_test)]
+    # make_idx_txt(cfg.test_path, test_id_list, cfg.interval, cfg.T)
+    # np.save(f'./datasets/mnist_test.npy', data[n_train + n_val:n_train + n_val + n_test, :, :, :])

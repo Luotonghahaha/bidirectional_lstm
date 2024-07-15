@@ -17,11 +17,12 @@ def make_idx_txt(Path, IdList, interval=2, T=20):
     for i in IdList:
         len_seq = int(T - interval * 2)
         for t in range(0, len_seq, 3):
-            f.write('{},{},{},{},{},{}\n'.format(i, t, t + 1, t + 3, t + 4, t + 2))
+            f.write('{},{},{},{},{},{}\n'.format(i, t, t + 1,t + 2, t + 3, t + 4,))
 
 
 if __name__ == '__main__':
-    data = data_loader('./data_load/mnist_test_seq.npy')
+    data = data_loader('./datasets/moving_mnist/mnist_test_seq.npy')
+
     # train_txt
     n_train = int(cfg.total_num * cfg.train_share)
     train_id_list = [i for i in range(n_train)]

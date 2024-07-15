@@ -7,7 +7,7 @@ from evaluation.psnr import psnr
 from evaluation.ie import ie
 from tqdm import tqdm
 from torch.utils.tensorboard import SummaryWriter
-from .data_load.data_loader import subDataset_i
+from .data_load.data_loader_2 import subDataset_i
 from config_para import cfg
 import os
 import time

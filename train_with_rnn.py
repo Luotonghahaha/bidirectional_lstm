@@ -1,13 +1,13 @@
 import torch
 import numpy as np
-from .models import Encoder, Decoder, RNNModel
+from bidirectional_lstm.models import Encoder, Decoder, RNNModel
 from torch.utils.data import DataLoader
 from evaluation.ssim import ssim
 from evaluation.psnr import psnr
 from evaluation.ie import ie
 from tqdm import tqdm
 from torch.utils.tensorboard import SummaryWriter
-from data_load.data_loader import subDataset
+from data_load.data_loader_2 import subDataset
 from config_para import cfg
 import os
 import time
@@ -25,9 +25,9 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # train_data_seq, train_target_inter, test_data_seq, test_target_inter = data_pro.make_data()
 # dataset_train = subDataset(train_data_seq, train_target_inter)
 # dataset_test = subDataset(test_data_seq, test_target_inter)
-dataset_train = subDataset(data_txt='./data/train.txt', data_npy='./data/mnist_train.npy', isTrain=True)
-dataset_val = subDataset(data_txt='./data/val.txt', data_npy='./data/mnist_val.npy', isTrain=False)
-dataset_test = subDataset(data_txt='./data/test.txt', data_npy='./data/mnist_test.npy', isTrain=False)
+dataset_train = subDataset(data_txt='./data/train_5.txt', data_npy='./data/mnist_train.npy', isTrain=True)
+dataset_val = subDataset(data_txt='./data/val_5.txt', data_npy='./data/mnist_val.npy', isTrain=False)
+dataset_test = subDataset(data_txt='./data/test_5.txt', data_npy='./data/mnist_test.npy', isTrain=False)
 
 # dataset_train = subDataset(data_path='./data', split='train', interval=3)
 # dataset_test = subDataset(data_path='./data', split='test', interval=3)
